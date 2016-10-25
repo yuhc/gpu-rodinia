@@ -1,0 +1,1 @@
+./omp/lud_omp_offload -s 8000 

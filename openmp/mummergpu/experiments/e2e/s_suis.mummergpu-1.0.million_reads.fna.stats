@@ -1,0 +1,10 @@
+Total,65867.875000
+Kernel,1180.202026
+Print matches,59613.746094
+Copy queries to GPU,208.202011
+Copy output from GPU,281.799011
+Copy suffix tree to GPU,82.073997
+Read queries from disk,1076.084961
+Suffix tree constructions,2442.489990
+Minimum substring length, 10
+Average query length, 35.964771

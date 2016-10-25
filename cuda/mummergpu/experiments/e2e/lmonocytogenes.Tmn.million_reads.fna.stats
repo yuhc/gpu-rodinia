@@ -1,0 +1,2 @@
+Q,R,T,m,r,t,n,Total,Match kernel,Print Kernel,Queries to board,Match coords to board,Match coords from board,Tree to board,Ref str to board,Queries from disk,Ref from disk,Output to disk,Tree construction,Tree reorder,Tree flatten,Ref reorder,Build coord table,Coords to buffers,Avg qry length
+0,0,1,1,0,0,1,28486.201172,4497.562988,4291.257812,128.457993,49.262001,1368.166992,112.803001,2.406000,3175.584961,3.586000,832.859009,1592.651978,773.164001,2395.607910,0.000000,3.782000,8829.109375,116.139305

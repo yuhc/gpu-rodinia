@@ -1,0 +1,84 @@
+\hypertarget{rng_8cu}{
+\section{rng.cu File Reference}
+\label{rng_8cu}\index{rng.cu@{rng.cu}}
+}
+
+
+Uniform and Normal RNG Implemented in CUDA as device functions.  
+{\ttfamily \#include $<$stdio.h$>$}\par
+{\ttfamily \#include $<$stdlib.h$>$}\par
+{\ttfamily \#include $<$string.h$>$}\par
+{\ttfamily \#include $<$limits.h$>$}\par
+{\ttfamily \#include $<$math.h$>$}\par
+{\ttfamily \#include $<$unistd.h$>$}\par
+{\ttfamily \#include $<$fcntl.h$>$}\par
+{\ttfamily \#include $<$float.h$>$}\par
+{\ttfamily \#include $<$sys/time.h$>$}\par
+\subsection*{Defines}
+\begin{DoxyCompactItemize}
+\item 
+\hypertarget{rng_8cu_a165bd291e719c4542ebcb897b0fa5481}{
+\#define {\bfseries BLOCK\_\-X}~16}
+\label{rng_8cu_a165bd291e719c4542ebcb897b0fa5481}
+
+\item 
+\hypertarget{rng_8cu_a9e261e89727a3aafdc4d8732f5b3389f}{
+\#define {\bfseries BLOCK\_\-Y}~16}
+\label{rng_8cu_a9e261e89727a3aafdc4d8732f5b3389f}
+
+\end{DoxyCompactItemize}
+\subsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+\_\-\_\-device\_\-\_\- float \hyperlink{rng_8cu_add17ca83d016a5c14fed14c87734ac8c}{d\_\-randu} (int $\ast$seed, int index)
+\item 
+\_\-\_\-device\_\-\_\- float \hyperlink{rng_8cu_ae73ea1d15de0775879be9d0457189f32}{d\_\-randn} (int $\ast$seed, int index)
+\item 
+int \hyperlink{rng_8cu_ae66f6b31b5ad750f1fe042a706a4e3d4}{main} ()
+\end{DoxyCompactItemize}
+
+
+\subsection{Detailed Description}
+Uniform and Normal RNG Implemented in CUDA as device functions. \begin{DoxyAuthor}{Author}
+Michael Trotter \& Matt Goodrum 
+\end{DoxyAuthor}
+
+
+\subsection{Function Documentation}
+\hypertarget{rng_8cu_ae73ea1d15de0775879be9d0457189f32}{
+\index{rng.cu@{rng.cu}!d\_\-randn@{d\_\-randn}}
+\index{d\_\-randn@{d\_\-randn}!rng.cu@{rng.cu}}
+\subsubsection[{d\_\-randn}]{\setlength{\rightskip}{0pt plus 5cm}\_\-\_\-device\_\-\_\- float d\_\-randn (int $\ast$ {\em seed}, \/  int {\em index})}}
+\label{rng_8cu_ae73ea1d15de0775879be9d0457189f32}
+Generates a normally (Gaussian) distributed number using the Box-\/Muller transformation 
+\begin{DoxyParams}{Parameters}
+\item[{\em seed}]The provided seed array. \item[{\em index}]The index within the seed array that will be modified as a result of this function \end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+A float in the range of FLOAT\_\-MIN to FLOAT\_\-MAX. This float is based on the modified seed value at index in the seed array. 
+\end{DoxyReturn}
+\begin{DoxySeeAlso}{See also}
+\href{http://en.wikipedia.org/wiki/Box-Muller_transform}{\tt http://en.wikipedia.org/wiki/Box-\/Muller\_\-transform} 
+\end{DoxySeeAlso}
+\hypertarget{rng_8cu_add17ca83d016a5c14fed14c87734ac8c}{
+\index{rng.cu@{rng.cu}!d\_\-randu@{d\_\-randu}}
+\index{d\_\-randu@{d\_\-randu}!rng.cu@{rng.cu}}
+\subsubsection[{d\_\-randu}]{\setlength{\rightskip}{0pt plus 5cm}\_\-\_\-device\_\-\_\- float d\_\-randu (int $\ast$ {\em seed}, \/  int {\em index})}}
+\label{rng_8cu_add17ca83d016a5c14fed14c87734ac8c}
+Generates a uniformly distributed number in the range of \mbox{[}0, 1) using the Linear Congruential Generator (LCG) 
+\begin{DoxyParams}{Parameters}
+\item[{\em seed}]The provided seed array. \item[{\em index}]The index within the seed array that will be modified by this function. \end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+A float in the range of \mbox{[}0,1). This float is based on the modified seed value at index in the seed array. 
+\end{DoxyReturn}
+\begin{DoxySeeAlso}{See also}
+\href{http://en.wikipedia.org/wiki/Linear_congruential_generator}{\tt http://en.wikipedia.org/wiki/Linear\_\-congruential\_\-generator} 
+\end{DoxySeeAlso}
+\begin{DoxyNote}{Note}
+GCC's values (M, A, C) for the LCG are used 
+\end{DoxyNote}
+\hypertarget{rng_8cu_ae66f6b31b5ad750f1fe042a706a4e3d4}{
+\index{rng.cu@{rng.cu}!main@{main}}
+\index{main@{main}!rng.cu@{rng.cu}}
+\subsubsection[{main}]{\setlength{\rightskip}{0pt plus 5cm}int main ()}}
+\label{rng_8cu_ae66f6b31b5ad750f1fe042a706a4e3d4}
+A simple main that demonstrates how to setup the seed array for use 

@@ -1,0 +1,6 @@
+usage: mummergpu [options] reference.fna query.fna   (-C run CPU version)
+
+To change the number of OMP threads, please change N_THREADS in mummergpu_gold.cpp
+
+
+bin/mummergpu -C ../../data/mummergpu/NC_003997.fna ../../data/mummergpu/NC_003997_q100bp.fna > NC_00399.out

@@ -1,0 +1,96 @@
+\hypertarget{rng_8c}{
+\section{rng.c File Reference}
+\label{rng_8c}\index{rng.c@{rng.c}}
+}
+
+
+Uniform and Normal RNG Implemented in OpenMP.  
+{\ttfamily \#include $<$stdlib.h$>$}\par
+{\ttfamily \#include $<$stdio.h$>$}\par
+{\ttfamily \#include $<$math.h$>$}\par
+{\ttfamily \#include $<$sys/time.h$>$}\par
+{\ttfamily \#include $<$omp.h$>$}\par
+{\ttfamily \#include $<$limits.h$>$}\par
+\subsection*{Defines}
+\begin{DoxyCompactItemize}
+\item 
+\hypertarget{rng_8c_a598a3330b3c21701223ee0ca14316eca}{
+\#define {\bfseries PI}~acos(-\/1)}
+\label{rng_8c_a598a3330b3c21701223ee0ca14316eca}
+
+\end{DoxyCompactItemize}
+\subsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+double \hyperlink{rng_8c_ab1c72924f3fb8ede452cb4f287907741}{randu} (int $\ast$seed, int index)
+\item 
+double \hyperlink{rng_8c_a4b441b42d0a8b6dc3a2b30db3be1d6b5}{randn} (int $\ast$seed, int index)
+\item 
+int \hyperlink{rng_8c_ae66f6b31b5ad750f1fe042a706a4e3d4}{main} ()
+\end{DoxyCompactItemize}
+\subsection*{Variables}
+\begin{DoxyCompactItemize}
+\item 
+\hypertarget{rng_8c_a4bc2e1f1527e2a5d555689a4288c341f}{
+long {\bfseries M} = INT\_\-MAX}
+\label{rng_8c_a4bc2e1f1527e2a5d555689a4288c341f}
+
+\item 
+\hypertarget{rng_8c_a56a52f73797a8d06045cf5bc1ab831bf}{
+int {\bfseries A} = 1103515245}
+\label{rng_8c_a56a52f73797a8d06045cf5bc1ab831bf}
+
+\item 
+\hypertarget{rng_8c_a5464533d23b59ba11030432e73528730}{
+int {\bfseries C} = 12345}
+\label{rng_8c_a5464533d23b59ba11030432e73528730}
+
+\end{DoxyCompactItemize}
+
+
+\subsection{Detailed Description}
+Uniform and Normal RNG Implemented in OpenMP. \begin{DoxyAuthor}{Author}
+Michael Trotter \& Matt Goodrum 
+\end{DoxyAuthor}
+
+
+\subsection{Function Documentation}
+\hypertarget{rng_8c_ae66f6b31b5ad750f1fe042a706a4e3d4}{
+\index{rng.c@{rng.c}!main@{main}}
+\index{main@{main}!rng.c@{rng.c}}
+\subsubsection[{main}]{\setlength{\rightskip}{0pt plus 5cm}int main ()}}
+\label{rng_8c_ae66f6b31b5ad750f1fe042a706a4e3d4}
+A simple main that demonstrates how to setup the seed array for use \hypertarget{rng_8c_a4b441b42d0a8b6dc3a2b30db3be1d6b5}{
+\index{rng.c@{rng.c}!randn@{randn}}
+\index{randn@{randn}!rng.c@{rng.c}}
+\subsubsection[{randn}]{\setlength{\rightskip}{0pt plus 5cm}double randn (int $\ast$ {\em seed}, \/  int {\em index})}}
+\label{rng_8c_a4b441b42d0a8b6dc3a2b30db3be1d6b5}
+Generates a normally distributed random number using the Box-\/Muller transformation \begin{DoxyNote}{Note}
+This function is thread-\/safe 
+\end{DoxyNote}
+
+\begin{DoxyParams}{Parameters}
+\item[{\em seed}]The seed array \item[{\em index}]The specific index of the seed to be advanced \end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+a double representing random number generated using the Box-\/Muller algorithm 
+\end{DoxyReturn}
+\begin{DoxySeeAlso}{See also}
+\href{http://en.wikipedia.org/wiki/Normal_distribution,}{\tt http://en.wikipedia.org/wiki/Normal\_\-distribution,} section computing value for normal random distribution 
+\end{DoxySeeAlso}
+\hypertarget{rng_8c_ab1c72924f3fb8ede452cb4f287907741}{
+\index{rng.c@{rng.c}!randu@{randu}}
+\index{randu@{randu}!rng.c@{rng.c}}
+\subsubsection[{randu}]{\setlength{\rightskip}{0pt plus 5cm}double randu (int $\ast$ {\em seed}, \/  int {\em index})}}
+\label{rng_8c_ab1c72924f3fb8ede452cb4f287907741}
+Generates a uniformly distributed random number using the provided seed and GCC's settings for the Linear Congruential Generator (LCG) \begin{DoxySeeAlso}{See also}
+\href{http://en.wikipedia.org/wiki/Linear_congruential_generator}{\tt http://en.wikipedia.org/wiki/Linear\_\-congruential\_\-generator} 
+\end{DoxySeeAlso}
+\begin{DoxyNote}{Note}
+This function is thread-\/safe 
+\end{DoxyNote}
+
+\begin{DoxyParams}{Parameters}
+\item[{\em seed}]The seed array \item[{\em index}]The specific index of the seed to be advanced \end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+a uniformly distributed number \mbox{[}0, 1) 
+\end{DoxyReturn}
