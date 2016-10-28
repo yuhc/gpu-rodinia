@@ -13,8 +13,9 @@ endif
 OUTPUT = -DOUTPUT
 
 C_C = g++
-OCL_LIB = -lOpenCL
-OCL_INC = -I/usr/local/cuda-5.5/include 
+OCL_LIB = -lOpenCL -L$(OPENCL_LIB)
+#OCL_INC = -I/usr/local/cuda-5.5/include
+OCL_INC = -I$(OPENCL_INC)
 
 default:	dwt2d
 
