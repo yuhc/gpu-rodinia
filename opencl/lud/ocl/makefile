@@ -13,4 +13,4 @@ $(EXE): lud.cpp
 	$(CC) $(KERNEL_DIM) $(CC_FLAGS) -o $(EXE) lud.cpp ../common/common.c $(INC) $(LIB) -lOpenCL
 
 clean:
-	rm -f $(EXE)
+	rm -f ../$(EXE)
