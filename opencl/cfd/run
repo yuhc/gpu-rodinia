@@ -9,6 +9,7 @@
 
 for ((  i=1;  i<=1;  i++))
 do
-  ./euler3d ../../data/cfd/fvcorr.domn.097K -t gpu -d 0
+#  ./euler3d ../../data/cfd/fvcorr.domn.097K -t gpu -d 0
 #  ./euler3d ../../data/cfd/fvcorr.domn.097K 1
+  ./euler3d ../../data/cfd/missile.domn.0.2M -t gpu -d 0
 done

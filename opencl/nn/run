@@ -1,1 +1,1 @@
-./nn filelist.txt -r 5 -lat 30 -lng 90
+./nn filelist.txt -p 0 -d 0 -r 50 -lat 30 -lng 90 -q -t
