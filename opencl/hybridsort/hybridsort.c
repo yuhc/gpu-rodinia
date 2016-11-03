@@ -125,7 +125,7 @@ int main(int argc, char** argv)
     for(int i = 0; i < SIZE; i++) {
         fprintf(tp,"%f ",cpu_idata[i]);
     }
-    
+
     fclose(tp);
     memcpy(cpu_odata, cpu_idata, mem_size);
     clock_t gpu_start = clock();

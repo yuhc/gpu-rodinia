@@ -89,10 +89,10 @@ void init_bucketsort(int listsize)
     cl_platform_id platformID[num];
     clGetPlatformIDs(num, platformID, NULL);
     
-    clGetDeviceIDs(platformID[1],CL_DEVICE_TYPE_GPU,0,NULL,&num);
+    clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,0,NULL,&num);
     
     cl_device_id devices[num];
-    err = clGetDeviceIDs(platformID[1],CL_DEVICE_TYPE_GPU,num,devices,NULL);
+    err = clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,num,devices,NULL);
 //    int gpu = 1;
 //    err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 2, &device_id, NULL);
     
@@ -148,7 +148,7 @@ void init_bucketsort(int listsize)
 	source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
 	fclose(fp);
     
-    bucketProgram = clCreateProgramWithSource(bucketContext, 1, (const char **) &source_str, (const size_t)&source_size, &err);
+    bucketProgram = clCreateProgramWithSource(bucketContext, 1, (const char **) &source_str, (const size_t *)&source_size, &err);
     if (!bucketProgram)
     {
         printf("Error: Failed to create bucket compute program!\n");
@@ -199,15 +199,15 @@ void histogramInit(int listsize) {
     cl_platform_id platformID[num];
     clGetPlatformIDs(num, platformID, NULL);
     
-    clGetDeviceIDs(platformID[1],CL_DEVICE_TYPE_GPU,0,NULL,&num);
+    clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,0,NULL,&num);
     
     char name[128];
     
-    clGetPlatformInfo(platformID[1], CL_PLATFORM_PROFILE,128,name,NULL);
+    clGetPlatformInfo(platformID[0], CL_PLATFORM_PROFILE,128,name,NULL);
     
     
     cl_device_id devices[num];
-    err = clGetDeviceIDs(platformID[1],CL_DEVICE_TYPE_GPU,num,devices,NULL);
+    err = clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,num,devices,NULL);
     //    int gpu = 1;
     //    err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 2, &device_id, NULL);
     
@@ -224,44 +224,46 @@ void histogramInit(int listsize) {
     cl_context_properties contextProperties[] =
     {
         CL_CONTEXT_PLATFORM,
-        (cl_context_properties)platformID[num],
+        (cl_context_properties)platformID[0],
         0
     };
     
     histoContext = clCreateContext(contextProperties, 1, &devices[0], NULL, NULL, &err);
-    
     histoCommands = clCreateCommandQueue(histoContext, devices[0], CL_QUEUE_PROFILING_ENABLE, &err);
     histoInput = clCreateBuffer(histoContext,  CL_MEM_READ_ONLY,  listsize*(sizeof(float)), NULL, NULL);
     histoOutput = clCreateBuffer(histoContext, CL_MEM_READ_WRITE, 1024 * sizeof(unsigned int), NULL, NULL);
+
     FILE *fp;
     const char fileName[]="./histogram1024.cl";
     size_t source_size;
     char *source_str;
-    
+
     fp = fopen(fileName, "r");
 	if (!fp) {
 		fprintf(stderr, "Failed to load kernel.\n");
 		exit(1);
 	}
-    
-    
+
+
 	source_str = (char *)malloc(MAX_SOURCE_SIZE);
 	source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
+    source_str[source_size] = '\0';
 	fclose(fp);
-    
-    histoProgram = clCreateProgramWithSource(histoContext, 1, (const char **) &source_str, (const size_t)&source_size, &err);
+
+    histoProgram = clCreateProgramWithSource(histoContext, 1, (const char **) &source_str, (const size_t *)&source_size, &err);
     if (!histoProgram)
     {
-        printf("Error: Failed to create compute program!\n");
+        printf("Error: Failed to create compute program! %d\n", err);
         exit(1);
     }
+    free(source_str);
 
     err = clBuildProgram(histoProgram, 0, NULL, NULL, NULL, NULL);
     if (err != CL_SUCCESS)
     {
         size_t len;
         char buffer[2048];
-        
+
         printf("Error: Failed to build program executable!\n");
         clGetProgramBuildInfo(histoProgram, devices[0], CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
         printf("%s\n", buffer);

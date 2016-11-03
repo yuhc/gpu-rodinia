@@ -53,9 +53,9 @@ void init_mergesort(int listsize){
     clGetPlatformIDs(0,NULL,&num);
     cl_platform_id platformID[num];
     clGetPlatformIDs(num,platformID,NULL);
-    clGetDeviceIDs(platformID[1],CL_DEVICE_TYPE_GPU,0,NULL,&num);
+    clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,0,NULL,&num);
     cl_device_id devices[num];
-    err = clGetDeviceIDs(platformID[1],CL_DEVICE_TYPE_GPU,num,devices,NULL);
+    err = clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,num,devices,NULL);
     
     if (err != CL_SUCCESS)
     {
@@ -94,7 +94,7 @@ void init_mergesort(int listsize){
 	source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
 
 	fclose(fp);
-    mergeProgram = clCreateProgramWithSource(mergeContext, 1, (const char **) &source_str, (const size_t)&source_size, &err);
+    mergeProgram = clCreateProgramWithSource(mergeContext, 1, (const char **) &source_str, (const size_t *)&source_size, &err);
     if (!mergeProgram)
     {
         printf("Error: Failed to create merge compute program!\n");
