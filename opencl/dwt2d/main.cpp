@@ -70,7 +70,7 @@ cl_context CreateContext()
     cl_context_properties contextProperties[] =
     {
         CL_CONTEXT_PLATFORM,
-        (cl_context_properties)platformIds[1],
+        (cl_context_properties)platformIds[0],
         0
     };
     context = clCreateContextFromType(contextProperties, CL_DEVICE_TYPE_GPU,
@@ -544,10 +544,10 @@ int writeLinear(cl_mem component, int pixWidth, int pixHeight, const char * file
 	
 	errNum = clEnqueueReadBuffer(commandQueue, component, CL_TRUE, 0, size, gpu_output, 0, NULL, NULL);
 	// fatal_CL(errNum, __LINE__);	
-	
+
 	// T to char 
 	samplesToChar(result, gpu_output, samplesNum);
-	
+
 	// Write component 
 	char outfile[strlen(filename)+strlen(suffix)];
     strcpy(outfile, filename);
@@ -561,7 +561,7 @@ int writeLinear(cl_mem component, int pixWidth, int pixHeight, const char * file
 	printf("\nWriting to %s (%d x %d)\n", outfile, pixWidth, pixHeight);
     write(i, result, samplesNum);
     close(i);
-	
+
 	// Clean up 
     free(gpu_output);
     free(result);
@@ -929,9 +929,8 @@ int main(int argc, char **argv)
 	{
         writeVisual = 0; //do not write visual when RDWT
     }
-	
-	
-	
+
+
 	//
 	// device init
 	// Create an OpenCL context on first available platform
@@ -950,7 +949,7 @@ int main(int argc, char **argv)
         Cleanup(context, commandQueue, program, kernel);
         return 1;
     }
-	
+
 	// Create OpenCL program from com_dwt.cl kernel source
 	program = CreateProgram(context, cldevice, "com_dwt.cl");
     if (program == NULL)
@@ -991,7 +990,7 @@ int main(int argc, char **argv)
 	// file names
     d->srcFilename = (char *)malloc(strlen(argv[0]));
     strcpy(d->srcFilename, argv[0]);
-    if (argc == 1) 
+    if (argc == 1)
 	{ // only one filename supplyed
         d->outFilename = (char *)malloc(strlen(d->srcFilename)+4);
         strcpy(d->outFilename, d->srcFilename);
@@ -1016,7 +1015,7 @@ int main(int argc, char **argv)
 	d->srcImg = (unsigned char *) malloc (inputSize);
 	if (getImg(d->srcFilename, d->srcImg, inputSize) == -1) 
         return -1;
-		
+
 	 // DWT
 	// Create memory objects, Set arguments for kernel functions, Queue the kernel up for execution across the array, Read the output buffer back to the Host, Output the result buffer
 	
@@ -1034,11 +1033,14 @@ int main(int argc, char **argv)
         else // 5/3
             processDWT<int>(d, forward, writeVisual);
     }
-	
 
 	Cleanup(context, commandQueue, program, kernel);
 	clReleaseKernel(c_CopySrcToComponents);
 	clReleaseKernel(c_CopySrcToComponent);
+
+    free(d->srcFilename);
+    free(d->srcImg);
+    free(d);
 	
     return 0;
 	
