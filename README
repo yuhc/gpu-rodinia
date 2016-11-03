@@ -5,6 +5,9 @@ Rodinia Benchmark Suite 3.1
 Please download the dataset from the [original package][data].
 [data]: http://lava.cs.virginia.edu/Rodinia/download_links.htm
 
+Make sure the Platform 0 is the one needed to be tested, and GPU is the
+device 0 on this platform.
+
 I. Overview
 
 The University of Virginia Rodinia Benchmark Suite is a collection of parallel programs which targets 

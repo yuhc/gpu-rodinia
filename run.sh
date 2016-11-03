@@ -4,8 +4,9 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 OCLDIR=$DIR/opencl
 
 # 10 in total
-# dwt2d and hybridsort does not work
-bm="backprop b+tree heartwall hotspot3D kmeans leukocyte myocyte \
+#  and  does not work
+bm="backprop b+tree dwt2d heartwall hotspot3D kmeans hybridsort \
+    leukocyte myocyte \
     nw pathfinder streamcluster bfs cfd gaussian hotspot \
     lavaMD lud nn particlefilter srad"
 
