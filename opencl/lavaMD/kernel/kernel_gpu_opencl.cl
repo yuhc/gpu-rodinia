@@ -102,6 +102,15 @@ __kernel void kernel_gpu_opencl(	par_str d_par_gpu,
 	int wtx = tx;
 
 	//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------180
+	//	ALLOCATE LOCAL VARIABLES
+	//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------180
+
+    // (enable the lines below only if wanting to use shared memory)
+    __local FOUR_VECTOR rA_shared[100];
+    __local FOUR_VECTOR rB_shared[100];
+    __local fp qB_shared[100];
+
+	//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------180
 	//	DO FOR THE NUMBER OF BOXES
 	//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------180
 
@@ -116,17 +125,12 @@ __kernel void kernel_gpu_opencl(	par_str d_par_gpu,
 
 		// home box
 		int first_i;
-		// (enable the line below only if wanting to use shared memory)
-		__local FOUR_VECTOR rA_shared[100];
 
 		// nei box
 		int pointer;
 		int k = 0;
 		int first_j;
 		int j = 0;
-		// (enable the two lines below only if wanting to use shared memory)
-		__local FOUR_VECTOR rB_shared[100];
-		__local fp qB_shared[100];
 
 		// common
 		fp r2;
