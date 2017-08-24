@@ -171,7 +171,7 @@ throw(std::string)
 void Usage(int argc, char**argv)
 {
 
-    fprintf(stderr,"Usage: %s <input_file>\n", argv[0]);
+    fprintf(stderr,"Usage: %s <input_file> [-p platform] [-d device] [-t gpu(0)/cpu(1)]\n", argv[0]);
 
 }
 //----------------------------------------------------------
@@ -188,11 +188,12 @@ int main(int argc, char * argv[])
     char *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
     try {
         char *input_f;
-        if(argc!=2) {
+        if(argc < 2) {
             Usage(argc, argv);
             exit(0);
         }
 
+        _clCmdParams(argc, argv);
         input_f = argv[1];
         printf("Reading File\n");
         //Read in Graph from a file
