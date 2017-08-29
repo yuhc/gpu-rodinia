@@ -1,5 +1,19 @@
 include ../../common/make.config
 
+#Can be changed by `make TYPE=CPU`
+TYPE = GPU
+
+#Library
+ifeq ($(TYPE),GPU)
+	OPENCL_DIR = $(NV_OPENCL_DIR)
+	OPENCL_INC = $(NV_OPENCL_INC)
+	OPENCL_LIB = $(NV_OPENCL_LIB)
+else
+	OPENCL_DIR = $(INTEL_OPENCL_DIR)
+	OPENCL_INC = $(INTEL_OPENCL_INC)
+	OPENCL_LIB = $(INTEL_OPENCL_LIB)
+endif
+
 #C compiler
 CC = g++
 
@@ -7,10 +21,10 @@ SRC = bfs.cpp timer.cc
 
 CC_FLAGS = -g -O3
 
-EXE = bfs
+EXE = bfs.out
 
 release:$(SRC)
-	$(CC) $(CC_FLAGS)  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL 
+	$(CC) $(CC_FLAGS)  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL -Wno-unused-result
 
 errmsg:$(SRC)
 	$(CC) $(CC_FLAGS)  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL -D ERRMSG PTX_MSG
@@ -27,8 +41,8 @@ res:$(SRC)
 debug: $(SRC)
 	$(CC) $(CC_FLAGS) $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL 
 
-run:
-	./$(EXE)
+run:$(EXE)
+	./$(EXE) ../../data/bfs/graph1MW_6.txt
 
 clean: $(SRC)
 	rm -f $(EXE) $(EXE).linkinfo result*

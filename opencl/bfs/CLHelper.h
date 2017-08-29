@@ -38,7 +38,7 @@ string kernel_names[2] = {"BFS_1", "BFS_2"};
 int work_group_size = 512;
 int platform_id_inuse = 0; // platform id in use (default: 0)
 int device_id_inuse = 0; //device id in use (default : 0)
-int device_type = 0; // device type, 0:GPU, 1:CPU
+int device_type = CL_DEVICE_TYPE_GPU; // device type, 0:GPU, 1:CPU
 
 /*
  * Converts the contents of a file into a string
