@@ -3,6 +3,8 @@
 #include <math.h>
 #include "backprop.h"
 #include "omp.h"
+#include <CL/cl.h>
+#include <string.h>
 
 extern char *strcpy();
 extern void exit();
@@ -15,7 +17,7 @@ void backprop_face()
   int i;
   float out_err, hid_err;
   net = bpnn_create(layer_size, 16, 1); // (16, 1 can not be changed)
-  
+
   printf("Input layer size : %d\n", layer_size);
   load(net);
   //entering the training kernel, only one iteration
@@ -27,23 +29,50 @@ void backprop_face()
 
 int setup(int argc, char **argv)
 {
-	
-  int seed;
+    layer_size = -1;
 
-  if (argc!=2){
-  fprintf(stderr, "usage: backprop <num of input elements>\n");
-  exit(0);
-  }
-  layer_size = atoi(argv[1]);
-  if (layer_size%16!=0){
-  fprintf(stderr, "The number of input points must be divided by 16\n");
-  exit(0);
-  }
-  
+    int cur_arg;
+	for (cur_arg = 1; cur_arg<argc; cur_arg++) {
+        if (strcmp(argv[cur_arg], "-h") == 0) {
+            fprintf(stderr, "usage: backprop <-n num of input elements> [-p platform_id] [-d device_id] [-t device_type]\n");
+            exit(0);
+        }
+        else if (strcmp(argv[cur_arg], "-n") == 0) {
+            if (argc >= cur_arg + 1) {
+                layer_size = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-p") == 0) {
+            if (argc >= cur_arg + 1) {
+                platform_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-d") == 0) {
+            if (argc >= cur_arg + 1) {
+                device_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-t") == 0) {
+            if (argc >= cur_arg + 1) {
+                device_type_inuse = atoi(argv[cur_arg+1]);
+                device_type_inuse = (device_type_inuse == 0) ? CL_DEVICE_TYPE_GPU
+                    : CL_DEVICE_TYPE_CPU;
+                cur_arg++;
+            }
+        }
+    }
 
-  seed = 7;   
-  bpnn_initialize(seed);
-  backprop_face();
+    if (layer_size % 16 != 0){
+        fprintf(stderr, "The number of input points must be divided by 16\n");
+        exit(0);
+    }
 
-  exit(0);
+    int seed = 7;
+    bpnn_initialize(seed);
+    backprop_face();
+
+    exit(0);
 }

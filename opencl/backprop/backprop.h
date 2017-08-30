@@ -61,4 +61,9 @@ int setup(int argc, char** argv);
 float **alloc_2d_dbl(int m, int n);
 float squash(float x);
 
+/*** OpenCL config variables ***/
+extern int platform_id_inuse;
+extern int device_id_inuse;
+extern int device_type_inuse;
+
 #endif

@@ -358,8 +358,6 @@ void bpnn_train(BPNN *net, float *eo, float *eh)
 }
 
 
-
-
 void bpnn_save(BPNN *net, char *filename)
 {
   int n1, n2, n3, i, j, memcnt;
@@ -387,8 +385,6 @@ void bpnn_save(BPNN *net, char *filename)
   fwrite( (char *) &n1 , sizeof(char), sizeof(char), pFile);
   fwrite( (char *) &n2 , sizeof(char), sizeof(char), pFile);
   fwrite( (char *) &n3 , sizeof(char), sizeof(char), pFile);
-
-  
 
   memcnt = 0;
   w = net->input_weights;

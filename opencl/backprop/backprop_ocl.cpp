@@ -22,6 +22,11 @@ static cl_device_type   device_type;
 static cl_device_id   * device_list;
 static cl_int           num_devices;
 
+// OCL config
+int platform_id_inuse = 0;            // platform id in use (default: 0)
+int device_id_inuse = 0;              //device id in use (default : 0)
+int device_type_inuse = CL_DEVICE_TYPE_GPU; // device type, 0:GPU, 1:CPU
+
 static int initialize(int use_gpu)
 {
 	cl_int result;
@@ -87,7 +92,6 @@ main( int argc, char** argv)
 {
 	setup(argc, argv);
 }
-
 
 
 int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
