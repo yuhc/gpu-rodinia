@@ -108,7 +108,7 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 		fatal_CL(error, __LINE__);
 
 	// Select the 1st platform
-	cl_platform_id platform = platforms[0];
+	cl_platform_id platform = platforms[platform_id_inuse];
 
 	// Get the name of the selected platform and print it (if there are multiple platforms, choose the first one)
 	char pbuf[100];
@@ -133,7 +133,7 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	// Create context for selected platform being GPU
 	cl_context context;
 	context = clCreateContextFromType(	context_properties, 
-										CL_DEVICE_TYPE_GPU, 
+										device_type, 
 										NULL, 
 										NULL, 
 										&error);
@@ -166,7 +166,7 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 
 	// Select the first device (previousely selected for the context) (if there are multiple devices, choose the first one)
 	cl_device_id device;
-	device = devices[0];
+	device = devices[device_id_inuse];
 
 	// Get the name of the selected device (previousely selected for the context) and print it
 	error = clGetDeviceInfo(device, 

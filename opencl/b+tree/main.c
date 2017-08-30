@@ -62,6 +62,7 @@
 // #include <sys/time.h>							// (in directory known to compiler)			needed by ???
 #include <math.h>									// (in directory known to compiler)			needed by log, pow
 #include <string.h>									// (in directory known to compiler)			needed by memset
+#include <CL/cl.h>
 
 //======================================================================================================================================================150
 //	COMMON
@@ -135,6 +136,13 @@ node *queue = NULL;
 * next to their corresponding keys.
 */
 bool verbose_output = false;
+
+/* OpenCL configurations.
+ * Declared in common.h
+*/
+int platform_id_inuse = 0;            // platform id in use (default: 0)
+int device_id_inuse = 0;              //device id in use (default : 0)
+int device_type = CL_DEVICE_TYPE_GPU; // device type, 0:GPU, 1:CPU
 
 //========================================================================================================================================================================================================200
 //	FUNCTIONS
@@ -1901,6 +1909,41 @@ main(	int argc,
 	      return -1;
 	    }
 	  }
+      else if (strcmp(argv[cur_arg], "-p") == 0) {
+        // check if value provided
+        if (argc >= cur_arg + 1) {
+            platform_id_inuse = atoi(argv[cur_arg + 1]);
+            cur_arg = cur_arg + 1;
+	    }
+	    else {
+	      printf("ERROR: Missing value to platform parameter\n");
+	      return -1;
+	    }
+      }
+      else if (strcmp(argv[cur_arg], "-d") == 0) {
+        // check if value provided
+        if (argc >= cur_arg + 1) {
+            device_id_inuse = atoi(argv[cur_arg + 1]);
+            cur_arg = cur_arg + 1;
+	    }
+	    else {
+	      printf("ERROR: Missing value to device parameter\n");
+	      return -1;
+	    }
+      }
+      else if (strcmp(argv[cur_arg], "-t") == 0) {
+        // check if value provided
+        if (argc >= cur_arg + 1) {
+            device_type = atoi(argv[cur_arg + 1]);
+            device_type = (device_type == 0) ? CL_DEVICE_TYPE_GPU
+                                    : CL_DEVICE_TYPE_CPU;
+            cur_arg = cur_arg + 1;
+	    }
+	    else {
+	      printf("ERROR: Missing value to device type parameter\n");
+	      return -1;
+	    }
+      }
 	}
 	// Print configuration
 	  if((input_file==NULL)||(command_file==NULL))
@@ -1918,7 +1961,7 @@ main(	int argc,
 
      commandFile = fopen ( command_file, "rb" );
      if (commandFile==NULL) {fputs ("Command File error",stderr); exit (1);}
-     
+
      // obtain file size:
      fseek (commandFile , 0 , SEEK_END);
      lSize = ftell (commandFile);
@@ -1927,22 +1970,20 @@ main(	int argc,
      // allocate memory to contain the whole file:
      commandBuffer = (char*) malloc (sizeof(char)*lSize);
      if (commandBuffer == NULL) {fputs ("Command Buffer memory error",stderr); exit (2);}
-     
+
      // copy the file into the buffer:
      result = fread (commandBuffer,1,lSize,commandFile);
      if (result != lSize) {fputs ("Command file reading error",stderr); exit (3);}
 
      /* the whole file is now loaded in the memory buffer. */
 
-  // terminate
+     // terminate
      fclose (commandFile);
 
      // For Debug
      char *sPointer=commandBuffer;
      printf("Command Buffer: \n");
      printf("%s",commandBuffer);
-     //
-
 
      pFile = fopen (output,"w+");
      if (pFile==NULL) 
