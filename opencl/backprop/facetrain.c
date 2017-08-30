@@ -57,8 +57,8 @@ int setup(int argc, char **argv)
         }
         else if (strcmp(argv[cur_arg], "-t") == 0) {
             if (argc >= cur_arg + 1) {
-                device_type_inuse = atoi(argv[cur_arg+1]);
-                device_type_inuse = (device_type_inuse == 0) ? CL_DEVICE_TYPE_GPU
+                device_type = atoi(argv[cur_arg+1]);
+                device_type = (device_type == 0) ? CL_DEVICE_TYPE_GPU
                     : CL_DEVICE_TYPE_CPU;
                 cur_arg++;
             }

@@ -64,6 +64,6 @@ float squash(float x);
 /*** OpenCL config variables ***/
 extern int platform_id_inuse;
 extern int device_id_inuse;
-extern int device_type_inuse;
+extern int device_type;
 
 #endif

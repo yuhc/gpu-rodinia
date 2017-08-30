@@ -18,27 +18,28 @@
 // local variables
 static cl_context	    context;
 static cl_command_queue cmd_queue;
-static cl_device_type   device_type;
 static cl_device_id   * device_list;
 static cl_int           num_devices;
 
 // OCL config
 int platform_id_inuse = 0;            // platform id in use (default: 0)
 int device_id_inuse = 0;              //device id in use (default : 0)
-int device_type_inuse = CL_DEVICE_TYPE_GPU; // device type, 0:GPU, 1:CPU
+int device_type = CL_DEVICE_TYPE_GPU; // device type, 0:GPU, 1:CPU
 
-static int initialize(int use_gpu)
+static int initialize(void)
 {
 	cl_int result;
 	size_t size;
+    cl_uint num_platforms;
 
 	// create OpenCL context
-	cl_platform_id platform_id;
-	if (clGetPlatformIDs(1, &platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(1,*,0) failed\n"); return -1; }
+	if (clGetPlatformIDs(0, NULL, &num_platforms) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(0,0,*) failed\n"); return -1; }
+	cl_platform_id all_platform_id[num_platforms];
+	if (clGetPlatformIDs(num_platforms, all_platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(*,*,0) failed\n"); return -1; }
+    cl_platform_id platform_id = all_platform_id[platform_id_inuse];
 	cl_context_properties ctxprop[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0};
-	device_type = use_gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU;
 	context = clCreateContextFromType( ctxprop, device_type, NULL, NULL, NULL );
-	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", use_gpu ? "GPU" : "CPU"); return -1; }
+	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU"); return -1; }
 
 	// get the list of GPUs
 	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, 0, NULL, &size );
@@ -52,8 +53,8 @@ static int initialize(int use_gpu)
 	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, size, device_list, NULL );
 	if( result != CL_SUCCESS ) { printf("ERROR: clGetContextInfo() failed\n"); return -1; }
 
-	// create command queue for the first device
-	cmd_queue = clCreateCommandQueue( context, device_list[0], 0, NULL );
+	// create command queue for the specific device
+	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], 0, NULL );
 	if( !cmd_queue ) { printf("ERROR: clCreateCommandQueue() failed\n"); return -1; }
 	return 0;
 }
@@ -70,7 +71,7 @@ static int shutdown()
 	context = 0;
 	device_list = 0;
 	num_devices = 0;
-	device_type = 0;
+	device_type = CL_DEVICE_TYPE_GPU;
 
 	return 0;
 }
@@ -115,10 +116,9 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	if(!fp) { printf("ERROR: unable to open '%s'\n", tempchar); return -1; }
 	fread(source + strlen(source), sourcesize, 1, fp);
 	fclose(fp);
-	
-	int use_gpu = 1;
-	if(initialize(use_gpu)) return -1;
-	
+
+	if(initialize()) return -1;
+
 	// compile kernel
 	cl_int err = 0;
 	const char * slist[2] = { source, 0 };
@@ -186,7 +186,7 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	input_prev_weights_ocl = clCreateBuffer(context, CL_MEM_READ_WRITE, (in + 1) * (hid + 1) * sizeof(float), NULL, &err );
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer input_prev_weights_ocl\n"); return -1;}
 		
-	printf("Performing GPU computation\n");
+	printf("Performing %s computation\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU");
 	
 	//write buffers
 	err = clEnqueueWriteBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, 0);
