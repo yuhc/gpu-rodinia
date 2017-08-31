@@ -240,7 +240,7 @@ cl_context cl_init(char devicePreference)
 }
 cl_context cl_init_context(int platform, int dev,int quiet) {
     int printInfo=1;
-    if (platform >= 0 && dev >= 0) printInfo = 0;
+//    if (platform >= 0 && dev >= 0) printInfo = 0;
 	cl_int status;
 	// Used to iterate through the platforms and devices, respectively
 	cl_uint numPlatforms;
@@ -268,12 +268,10 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 		for(unsigned int i = 0; i < numPlatforms ; i++)
 		{
 			char pbuf[100];
-			if (printInfo) printf("Platform %d:\t", i);
+			if (printInfo) printf("Platform %d\n", i);
 			status = clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR,
 				sizeof(pbuf), pbuf, NULL);
-			if (printInfo) printf("Vendor: %s\n", pbuf);
-
-			//unsigned int numDevices;
+			if (printInfo) printf("vendor: %s\n", pbuf);
 
 			status = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, 0, NULL, &numDevices);
 			if(cl_errChk(status, "checking for devices",true))
@@ -284,7 +282,7 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 			}
 			else
 			{
-				if (printInfo) printf("\tNo of devices for Platform %d is %u\n",i, numDevices);
+				if (printInfo) printf("no of devices: %u\n", numDevices);
 				//! Allocate an array of devices of size "numDevices"
 				devices = (cl_device_id*)malloc(sizeof(cl_device_id)*numDevices);
 				//! Populate Arrray with devices
@@ -298,14 +296,13 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 			{
 				char dbuf[100];
 				char deviceStr[100];
-				if (printInfo) printf("\tDevice: %d\t", j);
 				status = clGetDeviceInfo(devices[j], CL_DEVICE_VENDOR, sizeof(dbuf),
 					deviceStr, NULL);
 				cl_errChk(status, "Getting Device Info\n",true);
-			    if (printInfo) printf("Vendor: %s", deviceStr);
+			    if (printInfo) printf("\tdevice %d: %s", j, deviceStr);
 				status = clGetDeviceInfo(devices[j], CL_DEVICE_NAME, sizeof(dbuf),
 					dbuf, NULL);
-				if (printInfo) printf("\n\t\tName: %s\n", dbuf);
+				if (printInfo) printf(" %s\n", dbuf);
 			}
 		}
 	}
@@ -318,13 +315,9 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 
 	int platform_touse;
 	unsigned int device_touse;
-	if (printInfo) printf("Enter Platform and Device No (Seperated by Space) \n");
-	if (printInfo) scanf("%d %d", &platform_touse, &device_touse);
-	else {
-	  platform_touse = platform;
-	  device_touse = dev;
-	}
-	if (!quiet) printf("Using Platform %d \t Device No %d \n",platform_touse, device_touse);
+    platform_touse = platform;
+    device_touse = dev;
+	if (!quiet) printf("\nUsing Platform %d Device %d \n",platform_touse, device_touse);
 
 	//! Recheck how many devices does our chosen platform have
 	status = clGetDeviceIDs(platforms[platform_touse], CL_DEVICE_TYPE_ALL, 0, NULL, &numDevices);
@@ -353,10 +346,10 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 					NULL);
 	if(cl_errChk(status,"Error in Getting Device Info\n",true)) exit(1);
 	if(dtype == CL_DEVICE_TYPE_GPU) {
-	  if (!quiet) printf("Creating GPU Context\n\n");
+	  if (!quiet) printf("Creating GPU Context\n");
 	}
 	else if (dtype == CL_DEVICE_TYPE_CPU) {
-      if (!quiet) printf("Creating CPU Context\n\n");
+      if (!quiet) printf("Creating CPU Context\n");
 	}
 	else perror("This Context Type Not Supported\n");
 
@@ -372,19 +365,14 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 		exit(1);
 	}
 
-#define PROFILING
-
-#ifdef PROFILING
-
+#ifdef TIMING
 	commandQueue = clCreateCommandQueue(context,
-						devices[device_touse], CL_QUEUE_PROFILING_ENABLE, &status);
-
+            devices[device_touse], CL_QUEUE_PROFILING_ENABLE, &status);
+    if (!quiet) printf("Profiling enabled\n");
 #else
-
 	clCommandQueue = clCreateCommandQueue(clGPUContext,
-						devices[device_touse], NULL, &status);
-
-#endif // PROFILING
+            devices[device_touse], NULL, &status);
+#endif // TIMING
 
 	if(cl_errChk(status, "creating command queue",true)) {
 		exit(1);
@@ -400,7 +388,7 @@ void  cl_cleanup()
     if(commandQueue) {
         clReleaseCommandQueue(commandQueue);
     }
-    
+
     // Free the context
     if(context) {
         clReleaseContext(context);

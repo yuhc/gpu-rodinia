@@ -15,7 +15,7 @@
 #if defined (__APPLE__) || defined(MACOSX)
     #include <OpenCL/opencl.h>
 #else
-    #include <CL/opencl.h>
+    #include <CL/cl.h>
 #endif 
 
 float *OpenClGaussianElimination(
@@ -24,8 +24,8 @@ float *OpenClGaussianElimination(
 
 void printUsage();
 int parseCommandline(int argc, char *argv[], char* filename,
-                     int *q, int *t, int *p, int *d, int *size);
-                     
+                     int *q, int *v, int *t, int *p, int *d, int *size);
+
 void InitPerRun(int size,float *m);
 void ForwardSub(cl_context context, float *a, float *b, float *m, int size,int timing);
 void BackSub(float *a, float *b, float *finalVec, int size);

@@ -4,6 +4,8 @@
 #include "gaussianElim.h"
 #include <math.h>
 
+#include "timing.h"
+
 #ifdef RD_WG_SIZE_0_0
         #define BLOCK_SIZE_0 RD_WG_SIZE_0_0
 #elif defined(RD_WG_SIZE_0)
@@ -14,7 +16,7 @@
         #define BLOCK_SIZE_0 0
 #endif
 
-//2D defines. Go from specific to general                                                
+//2D defines. Go from specific to general
 #ifdef RD_WG_SIZE_1_0
         #define BLOCK_SIZE_1_X RD_WG_SIZE_1_0
 #elif defined(RD_WG_SIZE_1)
@@ -35,6 +37,19 @@
         #define BLOCK_SIZE_1_Y 0
 #endif
 
+//Primitives for timing
+#ifdef TIMING
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time= 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
 
 cl_context context=NULL;
 
@@ -77,22 +92,30 @@ int main(int argc, char *argv[]) {
     
     // args
     char filename[200];
-    int quiet=1,timing=0,platform=-1,device=-1;
+    int show_data=0,quiet=0,timing=0,platform=-1,device=-1;
     
     // parse command line
     if (parseCommandline(argc, argv, filename,
-			 &quiet, &timing, &platform, &device, &size)) {
+			 &quiet, &show_data, &timing, &platform, &device, &size)) {
     printUsage();
     return 0;
     }
 
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
     context = cl_init_context(platform,device,quiet);
-    
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
     if(size < 1)
-      {
+    {
 	fp = fopen(filename, "r");
 	fscanf(fp, "%d", &size);
-    
+
 	a = (float *) malloc(size * size * sizeof(float));
 	InitMat(fp,size, a, size, size);
 
@@ -115,7 +138,7 @@ int main(int argc, char *argv[]) {
 
       }
 
-    if (!quiet) {    
+    if (!quiet && show_data) {
       printf("The input matrix a is:\n");
       PrintMat(a, size, size, size);
 
@@ -132,35 +155,49 @@ int main(int argc, char *argv[]) {
     
     InitPerRun(size,m);
 
-    //begin timing	
-        // printf("The result of array b is before run: \n");
-        // PrintAry(b, size);
-    
     // run kernels
 	ForwardSub(context,a,b,m,size,timing);
-        // printf("The result of array b is after run: \n");
-        // PrintAry(b, size);
-    
-    //end timing
-    if (!quiet) {
+
+    if (!quiet && show_data) {
         printf("The result of matrix m is: \n");
-        
+
         PrintMat(m, size, size, size);
         printf("The result of matrix a is: \n");
         PrintMat(a, size, size, size);
         printf("The result of array b is: \n");
         PrintAry(b, size);
-        
+
         BackSub(a,b,finalVec,size);
         printf("The final solution is: \n");
         PrintAry(finalVec,size);
     }
-    
+
     free(m);
     free(a);
     free(b);
     free(finalVec);
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
+
     cl_cleanup();
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
   //OpenClGaussianElimination(context,timing);
 
   return 0;
@@ -177,12 +214,11 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,int t
     cl_int status=0;
     cl_program gaussianElim_program;
     cl_event writeEvent,kernelEvent,readEvent;
-    float writeTime=0,readTime=0,kernelTime=0;
     float writeMB=0,readMB=0;
-    
+
     gaussianElim_program = cl_compileProgram(
         (char *)"gaussianElim_kernels.cl",NULL);
-   
+
     fan1_kernel = clCreateKernel(
         gaussianElim_program, "Fan1", &status);
     status = cl_errChk(status, (char *)"Error Creating Fan1 kernel",true);
@@ -199,17 +235,23 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,int t
 
     cl_int error=0;
 
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
     a_dev = clCreateBuffer(context, CL_MEM_READ_WRITE,
         sizeof(float)*size*size, NULL, &error);
-        
     b_dev = clCreateBuffer(context, CL_MEM_READ_WRITE,
         sizeof(float)*size, NULL, &error);
-
     m_dev = clCreateBuffer(context, CL_MEM_READ_WRITE,
         sizeof(float) * size * size, NULL, &error);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
     cl_command_queue command_queue = cl_getCommandQueue();
-    
+
     error = clEnqueueWriteBuffer(command_queue,
                a_dev,
                1, // change to 0 for nonblocking write
@@ -219,10 +261,11 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,int t
                0,
                NULL,
                &writeEvent);
-    
-    if (timing) writeTime+=eventTime(writeEvent,command_queue);
+#ifdef TIMING
+    h2d_time += eventTime(writeEvent,command_queue);
+#endif
     clReleaseEvent(writeEvent);
-    
+
     error = clEnqueueWriteBuffer(command_queue,
                b_dev,
                1, // change to 0 for nonblocking write
@@ -232,9 +275,11 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,int t
                0,
                NULL,
                &writeEvent);
-    if (timing) writeTime+=eventTime(writeEvent,command_queue);
+#ifdef TIMING
+    h2d_time += eventTime(writeEvent,command_queue);
+#endif
     clReleaseEvent(writeEvent);
-               
+
     error = clEnqueueWriteBuffer(command_queue,
                m_dev,
                1, // change to 0 for nonblocking write
@@ -244,8 +289,11 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,int t
                0,
                NULL,
                &writeEvent);
-    if (timing) writeTime+=eventTime(writeEvent,command_queue);
+#ifdef TIMING
+    h2d_time += eventTime(writeEvent,command_queue);
+#endif
     clReleaseEvent(writeEvent);
+
     writeMB = (float)(sizeof(float) * size * (size + size + 1) / 1e6);
 
     // 3. Determine block sizes
@@ -285,7 +333,7 @@ izeFan2Buf[1])*localWorksizeFan2Buf[1];
         argchk |= clSetKernelArg(fan1_kernel, 4, sizeof(int), (void *)&t);
     
         cl_errChk(argchk,"ERROR in Setting Fan1 kernel args",true);
-        
+
         // launch kernel
         error = clEnqueueNDRangeKernel(
                   command_queue,  fan1_kernel, 1, 0,
@@ -293,24 +341,20 @@ izeFan2Buf[1])*localWorksizeFan2Buf[1];
                   0, NULL, &kernelEvent);
 
         cl_errChk(error,"ERROR in Executing Fan1 Kernel",true);
-        if (timing) {
-//             printf("here1a\n");
-             kernelTime+=eventTime(kernelEvent,command_queue);
-//             printf("here1b\n");
-        }
+#ifdef TIMING
+        kernel_time += eventTime(kernelEvent,command_queue);
+#endif
         clReleaseEvent(kernelEvent);
-		//Fan1<<<dimGrid,dimBlock>>>(m_cuda,a_cuda,Size,t);
-		//cudaThreadSynchronize();
-		
+
 		// kernel args
 		argchk  = clSetKernelArg(fan2_kernel, 0, sizeof(cl_mem), (void *)&m_dev);
         argchk |= clSetKernelArg(fan2_kernel, 1, sizeof(cl_mem), (void *)&a_dev);
         argchk |= clSetKernelArg(fan2_kernel, 2, sizeof(cl_mem), (void *)&b_dev);
         argchk |= clSetKernelArg(fan2_kernel, 3, sizeof(int), (void *)&size);
         argchk |= clSetKernelArg(fan2_kernel, 4, sizeof(int), (void *)&t);
-    
+
         cl_errChk(argchk,"ERROR in Setting Fan2 kernel args",true);
-        
+
         // launch kernel
         error = clEnqueueNDRangeKernel(
                   command_queue,  fan2_kernel, 2, 0,
@@ -318,15 +362,12 @@ izeFan2Buf[1])*localWorksizeFan2Buf[1];
                   0, NULL, &kernelEvent);
 
         cl_errChk(error,"ERROR in Executing Fan1 Kernel",true);
-        if (timing) {
-//             printf("here2a\n");
-             kernelTime+=eventTime(kernelEvent,command_queue);
-//             printf("here2b\n");
-        }
+#ifdef TIMING
+        kernel_time+=eventTime(kernelEvent,command_queue);
+#endif
         clReleaseEvent(kernelEvent);
-		//Fan2<<<dimGridXY,dimBlockXY>>>(m_cuda,a_cuda,b_cuda,Size,Size-t,t);
-		//cudaThreadSynchronize();
 	}
+
     // 5. transfer data off of device
     error = clEnqueueReadBuffer(command_queue,
         a_dev,
@@ -339,9 +380,11 @@ izeFan2Buf[1])*localWorksizeFan2Buf[1];
         &readEvent);
 
     cl_errChk(error,"ERROR with clEnqueueReadBuffer",true);
-    if (timing) readTime+=eventTime(readEvent,command_queue);
+#ifdef TIMING
+    d2h_time +=eventTime(readEvent,command_queue);
+#endif
     clReleaseEvent(readEvent);
-    
+
     error = clEnqueueReadBuffer(command_queue,
         b_dev,
         1, // change to 0 for nonblocking write
@@ -352,9 +395,11 @@ izeFan2Buf[1])*localWorksizeFan2Buf[1];
         NULL,
         &readEvent);
     cl_errChk(error,"ERROR with clEnqueueReadBuffer",true);
-    if (timing) readTime+=eventTime(readEvent,command_queue);
+#ifdef TIMING
+    d2h_time +=eventTime(readEvent,command_queue);
+#endif
     clReleaseEvent(readEvent);
-    
+
     error = clEnqueueReadBuffer(command_queue,
         m_dev,
         1, // change to 0 for nonblocking write
@@ -366,25 +411,34 @@ izeFan2Buf[1])*localWorksizeFan2Buf[1];
         &readEvent);
 
     cl_errChk(error,"ERROR with clEnqueueReadBuffer",true);
-    if (timing) readTime+=eventTime(readEvent,command_queue);
+#ifdef TIMING
+    d2h_time +=eventTime(readEvent,command_queue);
+#endif
     clReleaseEvent(readEvent);
+
     readMB = (float)(sizeof(float) * size * (size + size + 1) / 1e6);
-    
-    if (timing) {
-        printf("Matrix Size\tWrite(s) [size]\t\tKernel(s)\tRead(s)  [size]\t\tTotal(s)\n");
-        printf("%dx%d      \t",size,size);
-        
-        printf("%f [%.2fMB]\t",writeTime,writeMB);
-        
+clFinish(command_queue);
 
-        printf("%f\t",kernelTime);
-       
+#ifdef TIMING
+    printf("Matrix Size\tWrite(s) [size]\t\tKernel(s)\tRead(s)  [size]\t\tTotal(s)\n");
+    printf("%dx%d      \t",size,size);
+    printf("%f [%.2fMB]\t",h2d_time,writeMB);
+    printf("%f\t",kernel_time);
+    printf("%f [%.2fMB]\t",d2h_time,readMB);
+    printf("%f\n\n",h2d_time+kernel_time+d2h_time);
+#endif
 
-        printf("%f [%.2fMB]\t",readTime,readMB);
-       
-        printf("%f\n\n",writeTime+kernelTime+readTime);
-   }
-    
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
+    clReleaseMemObject(a_dev);
+    clReleaseMemObject(b_dev);
+    clReleaseMemObject(m_dev);
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
 
 float eventTime(cl_event event,cl_command_queue command_queue){
@@ -398,27 +452,26 @@ float eventTime(cl_event event,cl_command_queue command_queue){
                                     sizeof(cl_ulong),&eventEnd,NULL);
     cl_errChk(error,"ERROR in Event Profiling.",true);
 
-    return (float)((eventEnd-eventStart)/1e9);
+    return (float)((eventEnd-eventStart)/1000000.0);
 }
 
  // Ke Wang add a function to generate input internally
 int parseCommandline(int argc, char *argv[], char* filename,
-                     int *q, int *t, int *p, int *d, int *size){
+                     int *q, int *v, int *t, int *p, int *d, int *size){
     int i;
     if (argc < 2) return 1; // error
-    // strncpy(filename,argv[1],100);
     char flag;
-    
+
     for(i=1;i<argc;i++) {
       if (argv[i][0]=='-') {// flag
         flag = argv[i][1];
           switch (flag) {
-            case 's': // platform
+            case 's': // matrix size
               i++;
               *size = atoi(argv[i]);
 	      printf("Create matrix internally in parse, size = %d \n", *size);
               break;
-            case 'f': // platform
+            case 'f': // matrix file
               i++;
 	      strncpy(filename,argv[i],100);
 	      printf("Read file from %s \n", filename);
@@ -429,6 +482,9 @@ int parseCommandline(int argc, char *argv[], char* filename,
             case 'q': // quiet
               *q = 1;
               break;
+			case 'v': // show_data
+			  *v = 1;
+			  break;
             case 't': // timing
               *t = 1;
               break;
