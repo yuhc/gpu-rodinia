@@ -123,6 +123,49 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	printf("Platform: %s\n", pbuf);
 
 	//====================================================================================================100
+	//	GET DEVICE INFORMATION
+	//====================================================================================================100
+
+	cl_uint devices_size;
+    error = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, NULL, &devices_size);
+	if (error != CL_SUCCESS)
+		fatal_CL(error, __LINE__);
+    if (devices_size == 0) {
+        printf("There are no devices for Platform %d\n", platform_id_inuse);
+        exit(0);
+    }
+    printf("Device num: %u\n", devices_size);
+    // Get the list of devices (previousely selected for the context)
+    cl_device_id *devices = (cl_device_id *) malloc(devices_size);
+    error = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, devices_size,
+            devices, NULL);
+    if (error != CL_SUCCESS) 
+        fatal_CL(error, __LINE__);
+
+	// Select the device
+	cl_device_id device;
+	device = devices[device_id_inuse];
+
+	// Check device type
+	error = clGetDeviceInfo(device, CL_DEVICE_TYPE,
+            sizeof(device_type), (void *)&device_type, NULL);
+	if (error != CL_SUCCESS)
+		fatal_CL(error, __LINE__);
+	if(device_type == CL_DEVICE_TYPE_GPU)
+	    printf("Creating GPU Context\n");
+	else if (device_type == CL_DEVICE_TYPE_CPU)
+        printf("Creating CPU Context\n");
+	else
+        printf("This Context Type Not Supported\n");
+
+	// Get the name of the selected device
+	error = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(pbuf),
+            pbuf, NULL);
+	if (error != CL_SUCCESS)
+		fatal_CL(error, __LINE__);
+	printf("Device: %s\n", pbuf);
+
+	//====================================================================================================100
 	//	CREATE CONTEXT FOR THE PLATFORM
 	//====================================================================================================100
 
@@ -140,44 +183,6 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 										&error);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
-
-	//====================================================================================================100
-	//	GET DEVICES AVAILABLE FOR THE CONTEXT, SELECT ONE
-	//====================================================================================================100
-
-	// Get the number of devices (previousely selected for the context)
-	size_t devices_size;
-	error = clGetContextInfo(	context, 
-								CL_CONTEXT_DEVICES, 
-								0, 
-								NULL, 
-								&devices_size);
-	if (error != CL_SUCCESS) 
-		fatal_CL(error, __LINE__);
-
-	// Get the list of devices (previousely selected for the context)
-	cl_device_id *devices = (cl_device_id *) malloc(devices_size);
-	error = clGetContextInfo(	context, 
-								CL_CONTEXT_DEVICES, 
-								devices_size, 
-								devices, 
-								NULL);
-	if (error != CL_SUCCESS) 
-		fatal_CL(error, __LINE__);
-
-	// Select the first device (previousely selected for the context) (if there are multiple devices, choose the first one)
-	cl_device_id device;
-	device = devices[device_id_inuse];
-
-	// Get the name of the selected device (previousely selected for the context) and print it
-	error = clGetDeviceInfo(device, 
-							CL_DEVICE_NAME, 
-							sizeof(pbuf), 
-							pbuf, 
-							NULL);
-	if (error != CL_SUCCESS) 
-		fatal_CL(error, __LINE__);
-	printf("Device: %s\n", pbuf);
 
 	//====================================================================================================100
 	//	CREATE COMMAND QUEUE FOR THE DEVICE

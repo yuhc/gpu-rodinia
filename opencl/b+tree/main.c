@@ -142,7 +142,7 @@ bool verbose_output = false;
 */
 int platform_id_inuse = 0;            // platform id in use (default: 0)
 int device_id_inuse = 0;              //device id in use (default : 0)
-int device_type = CL_DEVICE_TYPE_GPU; // device type, 0:GPU, 1:CPU
+cl_device_type device_type;
 
 //========================================================================================================================================================================================================200
 //	FUNCTIONS
@@ -1931,6 +1931,7 @@ main(	int argc,
 	      return -1;
 	    }
       }
+      /*
       else if (strcmp(argv[cur_arg], "-t") == 0) {
         // check if value provided
         if (argc >= cur_arg + 1) {
@@ -1944,6 +1945,7 @@ main(	int argc,
 	      return -1;
 	    }
       }
+      */
 	}
 	// Print configuration
 	  if((input_file==NULL)||(command_file==NULL))

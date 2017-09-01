@@ -1,7 +1,7 @@
 include ../../common/make.config
 
 #Can be changed by `make TYPE=CPU`
-TYPE = CPU
+TYPE = GPU
 
 #Library
 ifeq ($(TYPE),GPU)
@@ -58,7 +58,7 @@ b+tree.out:	./main.o \
 	                -o b+tree.out
 
 run: b+tree.out
-	./b+tree.out file ../../data/b+tree/mil.txt command ../../data/b+tree/command.txt -p 0 -d 0 -t 0
+	./b+tree.out file ../../data/b+tree/mil.txt command ../../data/b+tree/command.txt -p 0 -d 0
 
 # ========================================================================================================================================================================================================200
 #	OBJECTS (COMPILE SOURCE FILES INTO OBJECTS)

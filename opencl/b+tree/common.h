@@ -457,7 +457,7 @@ deleteVal(	node * root,
 
 extern int platform_id_inuse;
 extern int device_id_inuse;
-extern int device_type;
+extern cl_device_type device_type;
 
 // int main(	int argc, 
 			// char *argv []);
