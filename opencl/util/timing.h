@@ -2,6 +2,7 @@
 #define __TIMING_H__
 
 #include <sys/time.h>
+#include <CL/cl.h>
 
 void time_measure_start(struct timeval *tv);
 void time_measure_end(struct timeval *tv);
@@ -18,5 +19,7 @@ static inline void tvsub(struct timeval *x,
 		ret->tv_usec += 1000000;
 	}
 }
+
+float probe_event_time(cl_event, cl_command_queue);
 
 #endif
