@@ -38,7 +38,7 @@ string kernel_names[2] = {"BFS_1", "BFS_2"};
 int work_group_size = 512;
 int platform_id_inuse = 0; // platform id in use (default: 0)
 int device_id_inuse = 0; //device id in use (default : 0)
-int device_type = CL_DEVICE_TYPE_GPU; // device type, 0:GPU, 1:CPU
+cl_device_type device_type = CL_DEVICE_TYPE_GPU;
 
 /*
  * Converts the contents of a file into a string
@@ -113,6 +113,7 @@ void _clCmdParams(int argc, char* argv[])
                 throw;
             }
             break;
+/*
         case 't':   // --t stands for device type, 0:GPU, 1:CPU
             if (++i < argc) {
                 sscanf(argv[i], "%u", &device_type);
@@ -123,6 +124,7 @@ void _clCmdParams(int argc, char* argv[])
                 throw;
             }
             break;
+*/
         default:
             ;
         }
@@ -137,9 +139,6 @@ void _clCmdParams(int argc, char* argv[])
 //  devices have no relationship with context
 void _clInit()
 {
-    int DEVICE_ID_INUSE = device_id_inuse;
-    int PLATFORM_ID_INUSE = platform_id_inuse;
-    int DEVICE_TYPE = device_type;
     cl_int resultCL;
 
     oclHandles.context = NULL;
@@ -187,21 +186,9 @@ void _clInit()
     free(allPlatforms);
 
     //-----------------------------------------------
-    //--cambine-2: create an OpenCL context
-    cl_context_properties cprops[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)targetPlatform, 0 };
-    oclHandles.context = clCreateContextFromType(cprops,
-                         DEVICE_TYPE,
-                         NULL,
-                         NULL,
-                         &resultCL);
-
-    if ((resultCL != CL_SUCCESS) || (oclHandles.context == NULL))
-        throw (string("InitCL()::Error: Creating Context (clCreateContextFromType)"));
-
-    //-----------------------------------------------
     //--cambine-3: detect OpenCL devices
     /* First, get the size of device list */
-    oclHandles.cl_status = clGetDeviceIDs(targetPlatform, DEVICE_TYPE, 0, NULL, &deviceListSize);
+    oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ALL, 0, NULL, &deviceListSize);
     if(oclHandles.cl_status!=CL_SUCCESS) {
         throw(string("exception in _clInit -> clGetDeviceIDs"));
     }
@@ -216,20 +203,48 @@ void _clInit()
         throw(string("InitCL()::Error: Could not allocate memory."));
 
     /* Next, get the device list data */
-    oclHandles.cl_status = clGetDeviceIDs(targetPlatform, DEVICE_TYPE, deviceListSize, \
-                                          oclHandles.devices, NULL);
+    oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ALL, deviceListSize,
+            oclHandles.devices, NULL);
     if(oclHandles.cl_status!=CL_SUCCESS) {
         throw(string("exception in _clInit -> clGetDeviceIDs-2"));
     }
+
+    /* Then, get device type */
+	oclHandles.cl_status = clGetDeviceInfo(oclHandles.devices[device_id_inuse],
+            CL_DEVICE_TYPE, sizeof(cl_device_type),	(void *)&device_type,
+            NULL);
+	if (oclHandles.cl_status != CL_SUCCESS) {
+        throw(string("error in Getting Device Info"));
+    }
+	if (device_type == CL_DEVICE_TYPE_GPU)
+        printf("Creating GPU Context\n");
+	else if (device_type == CL_DEVICE_TYPE_CPU)
+        printf("Creating CPU Context\n");
+	else
+        throw(string("unsupported device type"));
+
+    //-----------------------------------------------
+    //--cambine-2: create an OpenCL context
+    cl_context_properties cprops[3] = { CL_CONTEXT_PLATFORM, (cl_context_properties)targetPlatform, 0 };
+    oclHandles.context = clCreateContextFromType(cprops,
+                         device_type,
+                         NULL,
+                         NULL,
+                         &resultCL);
+
+    if ((resultCL != CL_SUCCESS) || (oclHandles.context == NULL))
+        throw (string("InitCL()::Error: Creating Context (clCreateContextFromType)"));
+
     //-----------------------------------------------
     //--cambine-4: Create an OpenCL command queue
     oclHandles.queue = clCreateCommandQueue(oclHandles.context,
-                                            oclHandles.devices[DEVICE_ID_INUSE],
+                                            oclHandles.devices[device_id_inuse],
                                             0,
                                             &resultCL);
 
     if ((resultCL != CL_SUCCESS) || (oclHandles.queue == NULL))
         throw(string("InitCL()::Creating Command Queue. (clCreateCommandQueue)"));
+
     //-----------------------------------------------
     //--cambine-5: Load CL file, build CL program object, create CL kernel object
     std::string  source_str = FileToString(kernel_file);
@@ -254,7 +269,7 @@ void _clInit()
 
         size_t length;
         resultCL = clGetProgramBuildInfo(oclHandles.program,
-                                         oclHandles.devices[DEVICE_ID_INUSE],
+                                         oclHandles.devices[device_id_inuse],
                                          CL_PROGRAM_BUILD_LOG,
                                          0,
                                          NULL,
@@ -264,7 +279,7 @@ void _clInit()
 
         char* buffer = (char*)malloc(length);
         resultCL = clGetProgramBuildInfo(oclHandles.program,
-                                         oclHandles.devices[DEVICE_ID_INUSE],
+                                         oclHandles.devices[device_id_inuse],
                                          CL_PROGRAM_BUILD_LOG,
                                          length,
                                          buffer,
