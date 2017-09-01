@@ -1,5 +1,20 @@
 #include "hotspot.h"
 
+//Primitives for timing
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
 
 void writeoutput(float *vect, int grid_rows, int grid_cols, char *file) {
 
@@ -71,11 +86,12 @@ int compute_tran_temp(cl_mem MatrixPower, cl_mem MatrixTemp[2], int col, int row
 
 	float max_slope = MAX_PD / (FACTOR_CHIP * t_chip * SPEC_HEAT_SI);
 	float step = PRECISION / max_slope;
-	int t;
+	int t, itr;
 
 	int src = 0, dst = 1;
 	
 	cl_int error;
+	cl_event events[total_iterations/num_iterations + 1];
 	
 	// Determine GPU work group grid
 	size_t global_work_size[2];
@@ -85,10 +101,7 @@ int compute_tran_temp(cl_mem MatrixPower, cl_mem MatrixTemp[2], int col, int row
 	local_work_size[0] = BLOCK_SIZE;
 	local_work_size[1] = BLOCK_SIZE;
 	
-	
-	long long start_time = get_time();	
-	
-	for (t = 0; t < total_iterations; t += num_iterations) {
+	for (t = 0, itr = 0; t < total_iterations; t += num_iterations, itr++) {
 		
 		// Specify kernel arguments
 		int iter = MIN(num_iterations, total_iterations - t);
@@ -105,28 +118,27 @@ int compute_tran_temp(cl_mem MatrixPower, cl_mem MatrixTemp[2], int col, int row
 		clSetKernelArg(kernel, 10, sizeof(float), (void *) &Ry);
 		clSetKernelArg(kernel, 11, sizeof(float), (void *) &Rz);
 		clSetKernelArg(kernel, 12, sizeof(float), (void *) &step);
-		
+
 		// Launch kernel
-		error = clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, NULL);
+		error = clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, global_work_size, local_work_size, 0, NULL, &events[itr]);
 		if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-		
+
 		// Flush the queue
 		error = clFlush(command_queue);
 		if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-		
+
 		// Swap input and output GPU matrices
 		src = 1 - src;
 		dst = 1 - dst;
 	}
-	
-	// Wait for all operations to finish
-	error = clFinish(command_queue);
-	if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-	
-	long long end_time = get_time();
-	long long total_time = (end_time - start_time);	
-	printf("\nKernel time: %.3f seconds\n", ((float) total_time) / (1000*1000));
-	
+
+	for (t = 0, itr = 0; t < total_iterations; t += num_iterations, itr++) {
+#ifdef TIMING
+	    kernel_time += probe_event_time(events[itr], command_queue);
+#endif
+	    clReleaseEvent(events[itr]);
+	}
+
 	return src;
 }
 
@@ -203,11 +215,14 @@ int main(int argc, char** argv) {
 
     if( !FilesavingPower || !FilesavingTemp) // || !MatrixOut)
         fatal("unable to allocate memory");
-	
+
 	// Read input data from disk
     readinput(FilesavingTemp, grid_rows, grid_cols, tfile);
     readinput(FilesavingPower, grid_rows, grid_cols, pfile);
-	
+
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
 
 	cl_int error;
 	cl_uint num_platforms;
@@ -260,7 +275,11 @@ int main(int argc, char** argv) {
     if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
 
 	// Create a command queue
+#ifdef TIMING
+	command_queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &error);
+#else
 	command_queue = clCreateCommandQueue(context, device, 0, &error);
+#endif
     if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
 
 	// Load kernel source from file
@@ -287,49 +306,84 @@ int main(int argc, char** argv) {
     if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
     kernel = clCreateKernel(program, "hotspot", &error);
     if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-	
-		
-	long long start_time = get_time();
-	
+
 	// Create two temperature matrices and copy the temperature input data
 	cl_mem MatrixTemp[2];
-	// Create input memory buffers on device
-	MatrixTemp[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, sizeof(float) * size, FilesavingTemp, &error);
-	if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-    
+
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
     // Lingjie Zhang modifited at Nov 1, 2015
     //MatrixTemp[1] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, sizeof(float) * size, NULL, &error);
     MatrixTemp[1] = clCreateBuffer(context, CL_MEM_READ_WRITE , sizeof(float) * size, NULL, &error);
     // end Lingjie Zhang modification
-    
     if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-	
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
+	// Create input memory buffers on device
+	MatrixTemp[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, sizeof(float) * size, FilesavingTemp, &error);
+	if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
 	// Copy the power input data
 	cl_mem MatrixPower = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(float) * size, FilesavingPower, &error);
 	if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-	
+
+// https://software.intel.com/en-us/forums/opencl/topic/509406
+// The copy should happen when the data is used; however the test shows the data is copied immediately with
+//  nVidia OpenCL. w/o we include the time as h2d_time.
+#ifdef  TIMING
+    gettimeofday(&tv_h2d_end, NULL);
+    tvsub(&tv_h2d_end, &tv_mem_alloc_end, &tv);
+    h2d_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	// Perform the computation
 	int ret = compute_tran_temp(MatrixPower, MatrixTemp, grid_cols, grid_rows, total_iterations, pyramid_height,
 								blockCols, blockRows, borderCols, borderRows, FilesavingTemp, FilesavingPower);
 	
+	cl_event event;
 	// Copy final temperature data back
-	cl_float *MatrixOut = (cl_float *) clEnqueueMapBuffer(command_queue, MatrixTemp[ret], CL_TRUE, CL_MAP_READ, 0, sizeof(float) * size, 0, NULL, NULL, &error);
+	cl_float *MatrixOut = (cl_float *) clEnqueueMapBuffer(command_queue, MatrixTemp[ret], CL_TRUE, CL_MAP_READ, 0, sizeof(float) * size, 0, NULL, &event, &error);
 	if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-	
-	long long end_time = get_time();	
-	printf("Total time: %.3f seconds\n", ((float) (end_time - start_time)) / (1000*1000));
-	
-	// Write final output to output file
-    writeoutput(MatrixOut, grid_rows, grid_cols, ofile);
-    
+#ifdef TIMING
+    d2h_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
 	error = clEnqueueUnmapMemObject(command_queue, MatrixTemp[ret], (void *) MatrixOut, 0, NULL, NULL);
 	if (error != CL_SUCCESS) fatal_CL(error, __LINE__);
-	
+
 	clReleaseMemObject(MatrixTemp[0]);
 	clReleaseMemObject(MatrixTemp[1]);
 	clReleaseMemObject(MatrixPower);
-	
-        clReleaseContext(context);
 
+    clReleaseContext(context);
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
+
+	// Write final output to output file
+    writeoutput(MatrixOut, grid_rows, grid_cols, ofile);
+ 
 	return 0;
 }
