@@ -26,6 +26,9 @@
 
 #include "../util/timer/timer.h"						// (in directory provided here)
 #include "../util/opencl/opencl.h"
+#ifdef TIMING
+#include "../../util/timing.h"
+#endif
 
 //======================================================================================================================================================150
 //	HEADER
@@ -60,16 +63,23 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	//	CPU VARIABLES
 	//======================================================================================================================================================150
 
-	// timer
-	long long time0;
-	long long time1;
-	long long time2;
-	long long time3;
-	long long time4;
-	long long time5;
-	long long time6;
+//Primitives for timing
+#ifdef TIMING
+	struct timeval tv;
+	struct timeval tv_total_start, tv_total_end;
+	struct timeval tv_init_end;
+	struct timeval tv_h2d_start, tv_h2d_end;
+	struct timeval tv_d2h_start, tv_d2h_end;
+	struct timeval tv_kernel_start, tv_kernel_end;
+	struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+	struct timeval tv_close_start, tv_close_end;
+	float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time= 0,
+		  d2h_time = 0, close_time = 0, total_time = 0;
+#endif
 
-	time0 = get_time();
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
 
 	//======================================================================================================================================================150
 	//	GPU SETUP
@@ -190,10 +200,12 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 
 	// Create a command queue
 	cl_command_queue command_queue;
-	command_queue = clCreateCommandQueue(	context, 
-											device, 
-											0, 
-											&error);
+#ifdef TIMING
+	command_queue = clCreateCommandQueue(context, device,
+            CL_QUEUE_PROFILING_ENABLE, &error);
+#else
+	command_queue = clCreateCommandQueue(context, device, 0, &error);
+#endif
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -253,7 +265,11 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
-	time1 = get_time();
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	//====================================================================================================100
 	//	END
@@ -392,7 +408,11 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
-	time2 = get_time();
+#ifdef  TIMING
+	gettimeofday(&tv_mem_alloc_end, NULL);
+	tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+	mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	//==================================================50
 	//	END
@@ -414,6 +434,7 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	//	knodesD
 	//==================================================50
 
+    cl_event event;
 	error = clEnqueueWriteBuffer(	command_queue,			// command queue
 									knodesD,				// destination
 									1,						// block the source from access until this copy operation complates (1=yes, 0=no)
@@ -422,9 +443,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									knodes,					// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	currKnodeD
@@ -438,9 +463,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									currKnode,				// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	offsetD
@@ -454,9 +483,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									offset,					// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	lastKnodeD
@@ -470,9 +503,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									lastKnode,				// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	offset_2D
@@ -486,9 +523,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									offset_2,				// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	startD
@@ -502,9 +543,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									start,					// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	endD
@@ -518,9 +563,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									end,					// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	END
@@ -542,9 +591,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									end,					// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+								    &event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	ansDLength
@@ -558,11 +611,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									reclength,					// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event);					// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
-
-	time3 = get_time();
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	END
@@ -645,16 +700,15 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 									local_work_size, 
 									0, 
 									NULL, 
-									NULL);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
 	// Wait for all operations to finish NOT SURE WHERE THIS SHOULD GO
-	error = clFinish(command_queue);
-	if (error != CL_SUCCESS) 
-		fatal_CL(error, __LINE__);
-
-	time4 = get_time();
+#ifdef TIMING
+    kernel_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//====================================================================================================100
 	//	END
@@ -680,9 +734,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 								recstart,					// The pointer to the image on the host.
 								0,							// Number of events in wait list. Not used.
 								NULL,						// Event wait list. Not used.
-								NULL);						// Event object for determining status. Not used.
+								&event);						// Event object for determining status. Not used.
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	ansDLength
@@ -696,11 +754,13 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 								reclength,					// The pointer to the image on the host.
 								0,							// Number of events in wait list. Not used.
 								NULL,						// Event wait list. Not used.
-								NULL);						// Event object for determining status. Not used.
+								&event);						// Event object for determining status. Not used.
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
-
-	time5 = get_time();
+#ifdef TIMING
+    d2h_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	END
@@ -713,6 +773,10 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	//======================================================================================================================================================150
 	//	GPU MEMORY DEALLOCATION
 	//======================================================================================================================================================150
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
 
 	// Release kernels...
 	clReleaseKernel(kernel);
@@ -743,23 +807,27 @@ kernel_gpu_opencl_wrapper_2(knode *knodes,
 	// ???
 	clReleaseContext(context);
 
-	time6 = get_time();
-
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+    tvsub(&tv_close_end, &tv_total_start, &tv);
+    total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 	//======================================================================================================================================================150
 	//	DISPLAY TIMING
 	//======================================================================================================================================================150
 
+#ifdef TIMING
 	printf("Time spent in different stages of GPU_CUDA KERNEL:\n");
-
-	printf("%15.12f s, %15.12f %% : GPU: SET DEVICE / DRIVER INIT\n",	(float) (time1-time0) / 1000000, (float) (time1-time0) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f %% : GPU MEM: ALO\n", 					(float) (time2-time1) / 1000000, (float) (time2-time1) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f %% : GPU MEM: COPY IN\n",					(float) (time3-time2) / 1000000, (float) (time3-time2) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f %% : GPU: KERNEL\n",						(float) (time4-time3) / 1000000, (float) (time4-time3) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f %% : GPU MEM: COPY OUT\n",				(float) (time5-time4) / 1000000, (float) (time5-time4) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f %% : GPU MEM: FRE\n", 					(float) (time6-time5) / 1000000, (float) (time6-time5) / (float) (time6-time0) * 100);
-
-	printf("Total time:\n");
-	printf("%.12f s\n", 												(float) (time6-time0) / 1000000);
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
 
 	//======================================================================================================================================================150
 	//	END

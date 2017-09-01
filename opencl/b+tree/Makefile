@@ -45,13 +45,15 @@ b+tree.out:	./main.o \
 		./kernel/kernel_gpu_opencl_wrapper_2.o \
 		./util/timer/timer.o \
 		./util/num/num.o \
-		./util/opencl/opencl.o
+		./util/opencl/opencl.o \
+        ./timing.o
 	$(C_C)	./main.o \
 			./kernel/kernel_gpu_opencl_wrapper.o \
 			./kernel/kernel_gpu_opencl_wrapper_2.o \
 			./util/timer/timer.o \
 			./util/num/num.o \
 			./util/opencl/opencl.o \
+            ./timing.o \
 			-lm \
 			-L$(OPENCL_LIB) \
 			-lOpenCL \
@@ -88,6 +90,8 @@ main.o:	./common.h \
 			-c \
 			-o ./kernel/kernel_gpu_opencl_wrapper.o \
 			-O3 \
+			-I../util \
+			-DTIMING \
 			-I$(OPENCL_INC)
 
 ./kernel/kernel_gpu_opencl_wrapper_2.o:	./common.h \
@@ -97,7 +101,13 @@ main.o:	./common.h \
 			-c \
 			-o ./kernel/kernel_gpu_opencl_wrapper_2.o \
 			-O3 \
+			-I../util \
+			-DTIMING \
 			-I$(OPENCL_INC)
+
+timing.o: ../util/timing.h ../util/timing.c
+	$(C_C) ../util/timing.c -I../util -c -o timing.o -I$(OPENCL_INC)
+
 
 # ======================================================================================================================================================150
 #	UTILITIES
