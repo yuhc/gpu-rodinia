@@ -37,7 +37,7 @@ struct timeval tv_init_end;
 struct timeval tv_h2d_start, tv_h2d_end;
 struct timeval tv_d2h_start, tv_d2h_end;
 struct timeval tv_kernel_start, tv_kernel_end;
-struct timeval tv_mem_alloc_start;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
 struct timeval tv_close_start, tv_close_end;
 float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
       d2h_time = 0, close_time = 0, total_time = 0;
@@ -76,7 +76,11 @@ static int initialize(void)
 	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU"); return -1; }
 
 	// create command queue for the specific device
+#ifdef TIMING
+	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, NULL );
+#else
 	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], 0, NULL );
+#endif
 	if( !cmd_queue ) { printf("ERROR: clCreateCommandQueue() failed\n"); return -1; }
 	return 0;
 }
@@ -221,23 +225,28 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	input_prev_weights_ocl = clCreateBuffer(context, CL_MEM_READ_WRITE, (in + 1) * (hid + 1) * sizeof(float), NULL, &err );
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer input_prev_weights_ocl\n"); return -1;}
 #ifdef  TIMING
-    gettimeofday(&tv_h2d_start, NULL);
-    tvsub(&tv_h2d_start, &tv_mem_alloc_start, &tv);
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
     mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
 #endif
 
 	printf("Performing %s computation\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU");
+    cl_event event;
 
 	//write buffers
-	err = clEnqueueWriteBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, 0);
+	err = clEnqueueWriteBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_ocl\n"); return -1; }
-	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, 0);
-	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_hidden_ocl\n"); return -1; }
-#ifdef  TIMING
-	gettimeofday(&tv_h2d_end, NULL);
-	tvsub(&tv_h2d_end, &tv_h2d_start, &tv);
-	h2d_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
 #endif
+    clReleaseEvent(event);
+
+	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &event);
+	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_hidden_ocl\n"); return -1; }
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
 
 	clSetKernelArg(kernel1, 0, sizeof(void *), (void*) &input_ocl);
 	clSetKernelArg(kernel1, 1, sizeof(void *), (void*) &output_hidden_ocl);
@@ -247,24 +256,20 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel1, 5, sizeof(float ) *  HEIGHT * WIDTH, (void*)NULL );
 	clSetKernelArg(kernel1, 6, sizeof(cl_int), (void*) &in);
 	clSetKernelArg(kernel1, 7, sizeof(cl_int), (void*) &hid);
-  
-	err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, 0);
+
+	err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
-
-#ifdef  TIMING
-	gettimeofday(&tv_kernel_end, NULL);
-	tvsub(&tv_kernel_end, &tv_h2d_end, &tv);
-	kernel_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#ifdef TIMING
+    kernel_time += probe_event_time(event,cmd_queue);
 #endif
+    clReleaseEvent(event);
 
-	err = clEnqueueReadBuffer(cmd_queue, hidden_partial_sum, 1, 0, num_blocks * WIDTH * sizeof(float), partial_sum, 0, 0, 0);
+	err = clEnqueueReadBuffer(cmd_queue, hidden_partial_sum, 1, 0, num_blocks * WIDTH * sizeof(float), partial_sum, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: partial sum\n"); return -1; }	
-
-#ifdef  TIMING
-	gettimeofday(&tv_d2h_end, NULL);
-	tvsub(&tv_d2h_end, &tv_kernel_end, &tv);
-	d2h_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#ifdef TIMING
+    d2h_time += probe_event_time(event,cmd_queue);
 #endif
+    clReleaseEvent(event);
 
 	for (int j = 1; j <= hid; j++) {
 		sum = 0.0;
@@ -281,20 +286,26 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err);  
 	bpnn_adjust_weights(net->output_delta, out, net->hidden_units, hid, net->hidden_weights, net->hidden_prev_weights);
 
-#ifdef  TIMING
-    gettimeofday(&tv_h2d_start, NULL);
-#endif
-	err = clEnqueueWriteBuffer(cmd_queue, hidden_delta_ocl,       1, 0, (hid + 1) * sizeof(float), net->hidden_delta, 0, 0, 0);
+	err = clEnqueueWriteBuffer(cmd_queue, hidden_delta_ocl,       1, 0, (hid + 1) * sizeof(float), net->hidden_delta, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer hidden_delta_ocl\n"); return -1; }
-	err = clEnqueueWriteBuffer(cmd_queue, input_prev_weights_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_prev_one_dim, 0, 0, 0);
-	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_prev_weights_ocl\n"); return -1; }
-	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl,       1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, 0);
-	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_hidden_ocl\n"); return -1; }
-#ifdef  TIMING
-	gettimeofday(&tv_h2d_end, NULL);
-	tvsub(&tv_h2d_end, &tv_h2d_start, &tv);
-	h2d_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
 #endif
+    clReleaseEvent(event);
+
+	err = clEnqueueWriteBuffer(cmd_queue, input_prev_weights_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_prev_one_dim, 0, 0, &event);
+	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_prev_weights_ocl\n"); return -1; }
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
+
+	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl,       1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &event);
+	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_hidden_ocl\n"); return -1; }
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
 
 	clSetKernelArg(kernel2, 0, sizeof(void *), (void*) &hidden_delta_ocl);
 	clSetKernelArg(kernel2, 1, sizeof(cl_int), (void*) &hid);
@@ -303,23 +314,29 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel2, 4, sizeof(void *), (void*) &input_hidden_ocl);
 	clSetKernelArg(kernel2, 5, sizeof(void *), (void*) &input_prev_weights_ocl );
 
-	err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, 0);
+	err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
-
-#ifdef  TIMING
-	gettimeofday(&tv_kernel_end, NULL);
-	tvsub(&tv_kernel_end, &tv_h2d_end, &tv);
-	kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#ifdef TIMING
+    kernel_time += probe_event_time(event,cmd_queue);
 #endif
+    clReleaseEvent(event);
 
-	err = clEnqueueReadBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, 0);
+	err = clEnqueueReadBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: input_ocl\n"); return -1; }	
-	err = clEnqueueReadBuffer(cmd_queue, input_hidden_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, 0);
+#ifdef TIMING
+    d2h_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
+
+	err = clEnqueueReadBuffer(cmd_queue, input_hidden_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: input_hidden_ocl\n"); return -1; }	
+#ifdef TIMING
+    d2h_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
+
 #ifdef  TIMING
-	gettimeofday(&tv_h2d_end, NULL);
-	tvsub(&tv_h2d_end, &tv_kernel_end, &tv);
-	h2d_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	gettimeofday(&tv_close_start, NULL);
 #endif
 
 	clReleaseMemObject(input_ocl);
@@ -336,7 +353,7 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 
 #ifdef  TIMING
 	gettimeofday(&tv_close_end, NULL);
-	tvsub(&tv_close_end, &tv_d2h_end, &tv);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
 	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
 	tvsub(&tv_close_end, &tv_total_start, &tv);
 	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;

@@ -17,7 +17,7 @@ CC = g++
 CC_FLAGS = -g -O2
 
 backprop.out: backprop.o imagenet.o facetrain.o
-	$(CC) $(CC_FLAGS) backprop_ocl.cpp backprop.o imagenet.o facetrain.o -o backprop.out -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL -I../util -DTIMING -Wno-unused-result
+	$(CC) $(CC_FLAGS) backprop_ocl.cpp ../util/timing.c backprop.o imagenet.o facetrain.o -o backprop.out -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL -I../util -DTIMING -Wno-unused-result
 
 %.o: %.[ch]
 	$(CC) $(CC_FLAGS) $< -c
