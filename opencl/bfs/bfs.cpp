@@ -10,12 +10,12 @@
 #include "timer.h"
 #endif
 
-#include "CLHelper.h"
-#include "util.h"
-
 #ifdef TIMING
 #include "timing.h"
 #endif
+
+#include "CLHelper.h"
+#include "util.h"
 
 #define MAX_THREADS_PER_BLOCK 256
 
@@ -32,7 +32,7 @@ struct timeval tv_total_start, tv_total_end;
 struct timeval tv_h2d_start, tv_h2d_end;
 struct timeval tv_d2h_start, tv_d2h_end;
 struct timeval tv_kernel_start, tv_kernel_end;
-struct timeval tv_mem_alloc_start;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
 struct timeval tv_close_start, tv_close_end;
 float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time= 0,
       d2h_time = 0, close_time = 0, total_time = 0;
@@ -114,8 +114,8 @@ throw(std::string)
         d_over = _clMallocRW(sizeof(char), &h_over);
 
 #ifdef  TIMING
-        gettimeofday(&tv_h2d_start, NULL);
-        tvsub(&tv_h2d_start, &tv_mem_alloc_start, &tv);
+        gettimeofday(&tv_mem_alloc_end, NULL);
+        tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
         mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
 #endif
 
@@ -126,12 +126,6 @@ throw(std::string)
         _clMemcpyH2D(d_graph_visited, no_of_nodes*sizeof(char), h_graph_visited);
         _clMemcpyH2D(d_cost, no_of_nodes*sizeof(int), h_cost);
 
-#ifdef  TIMING
-        gettimeofday(&tv_h2d_end, NULL);
-        tvsub(&tv_h2d_end, &tv_h2d_start, &tv);
-        h2d_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-#endif
-
         //--2 invoke kernel
 #ifdef	PROFILING
         timer kernel_timer;
@@ -141,15 +135,8 @@ throw(std::string)
 #endif
         do {
             h_over = false;
-#ifdef  TIMING
-            gettimeofday(&tv_h2d_start, NULL);
-#endif
             _clMemcpyH2D(d_over, sizeof(char), &h_over);
-#ifdef  TIMING
-            gettimeofday(&tv_h2d_end, NULL);
-            tvsub(&tv_h2d_end, &tv_h2d_start, &tv);
-            h2d_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-#endif
+
             //--kernel 0
             int kernel_id = 0;
             int kernel_idx = 0;
@@ -175,18 +162,8 @@ throw(std::string)
 
             //work_items = no_of_nodes;
             _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
-#ifdef  TIMING
-            gettimeofday(&tv_kernel_end, NULL);
-            tvsub(&tv_kernel_end, &tv_h2d_end, &tv);
-            kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-#endif
 
             _clMemcpyD2H(d_over,sizeof(char), &h_over);
-#ifdef  TIMING
-            gettimeofday(&tv_d2h_end, NULL);
-            tvsub(&tv_d2h_end, &tv_kernel_end, &tv);
-            d2h_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-#endif
         } while(h_over);
 
         _clFinish();
@@ -196,16 +173,11 @@ throw(std::string)
 #endif
 
         //--3 transfer data from device to host
-#ifdef  TIMING
-        gettimeofday(&tv_d2h_start, NULL);
-#endif
         _clMemcpyD2H(d_cost,no_of_nodes*sizeof(int), h_cost);
-#ifdef  TIMING
-        gettimeofday(&tv_d2h_end, NULL);
-        tvsub(&tv_d2h_end, &tv_d2h_start, &tv);
-        d2h_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-#endif
 
+#ifdef  TIMING
+        gettimeofday(&tv_close_start, NULL);
+#endif
         //--statistics
 #ifdef	PROFILING
         std::cout<<"kernel time(s):"<<kernel_time<<std::endl;
@@ -234,7 +206,7 @@ throw(std::string)
     }
 #ifdef  TIMING
         gettimeofday(&tv_close_end, NULL);
-        tvsub(&tv_close_end, &tv_d2h_end, &tv);
+        tvsub(&tv_close_end, &tv_close_start, &tv);
         close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
         tvsub(&tv_close_end, &tv_total_start, &tv);
         total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;

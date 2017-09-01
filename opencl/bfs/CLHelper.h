@@ -12,6 +12,10 @@
 #include <fstream>
 #include <string>
 
+#ifdef TIMING
+#include "timing.h"
+#endif
+
 using std::string;
 using std::ifstream;
 using std::cerr;
@@ -19,6 +23,9 @@ using std::endl;
 using std::cout;
 //#pragma OPENCL EXTENSION cl_nv_compiler_options:enable
 #define WORK_DIM 2	//work-items dimensions
+
+extern float init_time, mem_alloc_time, h2d_time, kernel_time,
+      d2h_time, close_time, total_time;
 
 struct oclHandleStruct {
     cl_context              context;
@@ -237,10 +244,15 @@ void _clInit()
 
     //-----------------------------------------------
     //--cambine-4: Create an OpenCL command queue
+#ifdef TIMING
     oclHandles.queue = clCreateCommandQueue(oclHandles.context,
-                                            oclHandles.devices[device_id_inuse],
-                                            0,
-                                            &resultCL);
+            oclHandles.devices[device_id_inuse], CL_QUEUE_PROFILING_ENABLE,
+            &resultCL);
+#else
+    oclHandles.queue = clCreateCommandQueue(oclHandles.context,
+            oclHandles.devices[device_id_inuse], 0, &resultCL);
+
+#endif
 
     if ((resultCL != CL_SUCCESS) || (oclHandles.queue == NULL))
         throw(string("InitCL()::Creating Command Queue. (clCreateCommandQueue)"));
@@ -452,10 +464,15 @@ cl_mem _clMalloc(int size, void * h_mem_ptr) throw(string)
 //--date:	17/01/2011
 void _clMemcpyH2D(cl_mem d_mem, int size, const void *h_mem_ptr) throw(string)
 {
-    oclHandles.cl_status = clEnqueueWriteBuffer(oclHandles.queue, d_mem, CL_TRUE, 0, size, h_mem_ptr, 0, NULL, NULL);
+    cl_event event;
+    oclHandles.cl_status = clEnqueueWriteBuffer(oclHandles.queue, d_mem,
+            CL_TRUE, 0, size, h_mem_ptr, 0, NULL, &event);
 #ifdef ERRMSG
     if(oclHandles.cl_status != CL_SUCCESS)
         throw(string("excpetion in _clMemcpyH2D"));
+#endif
+#ifdef TIMING
+    h2d_time += probe_event_time(event, oclHandles.queue);
 #endif
 }
 //--------------------------------------------------------
@@ -521,7 +538,8 @@ cl_mem _clMallocWO(int size) throw(string)
 //transfer data from device to host
 void _clMemcpyD2H(cl_mem d_mem, int size, void * h_mem) throw(string)
 {
-    oclHandles.cl_status = clEnqueueReadBuffer(oclHandles.queue, d_mem, CL_TRUE, 0, size, h_mem, 0,0,0);
+    cl_event event;
+    oclHandles.cl_status = clEnqueueReadBuffer(oclHandles.queue, d_mem, CL_TRUE, 0, size, h_mem, 0,0, &event);
 #ifdef ERRMSG
     oclHandles.error_str = "excpetion in _clCpyMemD2H -> ";
     switch(oclHandles.cl_status) {
@@ -552,6 +570,9 @@ void _clMemcpyD2H(cl_mem d_mem, int size, void * h_mem) throw(string)
     }
     if(oclHandles.cl_status != CL_SUCCESS)
         throw(oclHandles.error_str);
+#endif
+#ifdef TIMING
+    d2h_time += probe_event_time(event, oclHandles.queue);
 #endif
 }
 
@@ -722,6 +743,10 @@ void _clInvokeKernel(int kernel_id, int work_items, int work_group_size) throw(s
     if(oclHandles.cl_status != CL_SUCCESS)
         throw(oclHandles.error_str);
 #endif
+
+#ifdef TIMING
+    kernel_time += probe_event_time(e[0], oclHandles.queue);
+#endif
     //_clFinish();
     // oclHandles.cl_status = clWaitForEvents(1, &e[0]);
     // #ifdef ERRMSG
@@ -791,15 +816,16 @@ void _clInvokeKernel2D(int kernel_id, int range_x, int range_y, int group_x, int
     if(oclHandles.cl_status != CL_SUCCESS)
         throw(oclHandles.error_str);
 #endif
+
+#ifdef TIMING
+    kernel_time += probe_event_time(e[0], oclHandles.queue);
+#endif
+
     //_clFinish();
     /*oclHandles.cl_status = clWaitForEvents(1, &e[0]);
-
     #ifdef ERRMSG
-
         if (oclHandles.cl_status!= CL_SUCCESS)
-
             throw(string("excpetion in _clEnqueueNDRange() -> clWaitForEvents"));
-
     #endif*/
 }
 

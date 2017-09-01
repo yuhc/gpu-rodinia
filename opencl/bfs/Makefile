@@ -17,14 +17,14 @@ endif
 #C compiler
 CC = g++
 
-SRC = bfs.cpp timer.cc
+SRC = bfs.cpp timer.cc ../util/timing.c
 
 CC_FLAGS = -g -O3
 
 EXE = bfs.out
 
 release:$(SRC)
-	$(CC) $(CC_FLAGS)  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL -Wno-unused-result -DTIMING -I../util
+	$(CC) $(CC_FLAGS)  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL -Wno-unused-result -I../util -DTIMING
 
 errmsg:$(SRC)
 	$(CC) $(CC_FLAGS)  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL -D ERRMSG PTX_MSG
@@ -42,7 +42,7 @@ debug: $(SRC)
 	$(CC) $(CC_FLAGS) $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL 
 
 run:$(EXE)
-	./$(EXE) ../../data/bfs/graph1MW_6.txt
+	./$(EXE) ../../data/bfs/graph1MW_6.txt -p 0 -d 0
 
 clean: $(SRC)
 	rm -f $(EXE) $(EXE).linkinfo result*
