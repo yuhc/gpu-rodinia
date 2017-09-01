@@ -32,7 +32,7 @@ imagenet.o: imagenet.c
 	$(CC) $(CC_FLAGS) imagenet.c -c
 
 run: backprop.out
-	./backprop.out -n 4194304 -p 0 -d 0 -t 0
+	./backprop.out -n 4194304 -p 0 -d 0
 
 clean:
 	rm -f *.o *~ *.out *.linkinfo

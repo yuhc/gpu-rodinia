@@ -11,6 +11,7 @@
 #define MOMENTUM 0.3  //momentum value
 #define NUM_THREAD 4  //OpenMP threads
 
+#include <CL/cl.h>
 
 typedef struct {
   int input_n;                  /* number of input units */
@@ -64,6 +65,6 @@ float squash(float x);
 /*** OpenCL config variables ***/
 extern int platform_id_inuse;
 extern int device_id_inuse;
-extern int device_type;
+extern cl_device_type device_type;
 
 #endif

@@ -55,14 +55,6 @@ int setup(int argc, char **argv)
                 cur_arg++;
             }
         }
-        else if (strcmp(argv[cur_arg], "-t") == 0) {
-            if (argc >= cur_arg + 1) {
-                device_type = atoi(argv[cur_arg+1]);
-                device_type = (device_type == 0) ? CL_DEVICE_TYPE_GPU
-                    : CL_DEVICE_TYPE_CPU;
-                cur_arg++;
-            }
-        }
     }
 
     if (layer_size % 16 != 0){
