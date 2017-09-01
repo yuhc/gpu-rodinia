@@ -1,9 +1,16 @@
 include ../../common/make.config
 
-# OpenCL installation path      
-# OPENCL_DIR = /home/mwb7w/NVIDIA_GPU_Computing_SDK/
-# OPENCL_DIR = /home/mwb7w/ati-stream-sdk-v2.2-lnx64/
+#Can be changed by `make TYPE=CPU`
+TYPE = GPU
 
+#Library
+ifeq ($(TYPE),GPU)
+	OPENCL_INC = $(NV_OPENCL_INC)
+	OPENCL_LIB = $(NV_OPENCL_LIB)
+else
+	OPENCL_INC = $(INTEL_OPENCL_INC)
+	OPENCL_LIB = $(INTEL_OPENCL_LIB)
+endif
 
 CC = gcc
 CC_FLAGS = -g -O3 -Wall
