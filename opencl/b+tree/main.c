@@ -1972,6 +1972,7 @@ main(	int argc,
      // allocate memory to contain the whole file:
      commandBuffer = (char*) malloc (sizeof(char)*lSize);
      if (commandBuffer == NULL) {fputs ("Command Buffer memory error",stderr); exit (2);}
+     commandBuffer[lSize] = '\0';
 
      // copy the file into the buffer:
      result = fread (commandBuffer,1,lSize,commandFile);
@@ -2060,7 +2061,7 @@ main(	int argc,
 	char *commandPointer=commandBuffer;
 	printf("Waiting for command\n");
 	printf("> ");
-	while (sscanf(commandPointer, "%c", &instruction) != EOF) {
+	while (sscanf(commandPointer, "%c", &instruction) != EOF && instruction != '\0') {
 	  commandPointer++;
 	  switch (instruction) {
 			// ----------------------------------------40
