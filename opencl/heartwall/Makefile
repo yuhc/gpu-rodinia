@@ -1,5 +1,19 @@
 include ../../common/make.config
 
+#Can be changed by `make TYPE=CPU`
+TYPE = GPU
+
+#Library
+ifeq ($(TYPE),GPU)
+	OPENCL_DIR = $(NV_OPENCL_DIR)
+	OPENCL_INC = $(NV_OPENCL_INC)
+	OPENCL_LIB = $(NV_OPENCL_LIB)
+else
+	OPENCL_DIR = $(INTEL_OPENCL_DIR)
+	OPENCL_INC = $(INTEL_OPENCL_INC)
+	OPENCL_LIB = $(INTEL_OPENCL_LIB)
+endif
+
 ifdef OUTPUT
 override OUTPUT = -DOUTPUT
 endif
@@ -10,7 +24,9 @@ OCL_LIB_DIR = -L$(OPENCL_LIB)
 C_C = gcc
 OCL_LIB = -lOpenCL
 
-./a.out:	./main.o \
+EXE = heartwall.out
+
+$(EXE):	./main.o \
 			./kernel/kernel_gpu_opencl_wrapper.o \
 			./util/avi/avilib.o \
 			./util/avi/avimod.o \
@@ -26,7 +42,10 @@ OCL_LIB = -lOpenCL
 			./util/opencl/opencl.o \
 			-lm \
 			$(OCL_LIB_DIR) \
-			$(OCL_LIB) -o heartwall.out
+			$(OCL_LIB) -o $(EXE)
+
+run: $(EXE)
+	./$(EXE) -n 100 -f ../../data/heartwall/test.avi -i ../../data/heartwall/input.txt -p 0 -d 0
 
 # ======================================================================================================================================================150
 #	MAIN FUNCTION

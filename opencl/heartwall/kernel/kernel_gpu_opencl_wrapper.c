@@ -40,6 +40,9 @@
 //	KERNEL_GPU_CUDA_WRAPPER FUNCTION
 //========================================================================================================================================================================================================200
 
+extern int platform_id_inuse;
+extern int device_id_inuse;
+
 void 
 kernel_gpu_opencl_wrapper(	params_common common,
 							int* endoRow,
@@ -112,7 +115,7 @@ kernel_gpu_opencl_wrapper(	params_common common,
 	}
 
 	// Select platform
-	int plat = 0;
+	int plat = platform_id_inuse;
 	platform = platforms[plat];
 	printf("Selecting platform %d\n", plat);
 
@@ -181,7 +184,7 @@ kernel_gpu_opencl_wrapper(	params_common common,
 	}
 
 	// Select device (previousely selected for the context) (if there are multiple devices, choose the first one)
-	int devi = 0;
+	int devi = device_id_inuse;
 	device = devices[devi];
 	printf("Selecting device %d\n", devi);
 

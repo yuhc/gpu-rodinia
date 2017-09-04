@@ -14,6 +14,7 @@
 #include <stdlib.h>								// (in directory known to compiler)
 #include <math.h>								// (in directory known to compiler)
 #include <string.h>								// (in directory known to compiler)
+#include <CL/cl.h>
 
 //======================================================================================================================================================150
 //	MAIN FUNCTION HEADER
@@ -42,15 +43,87 @@
 //	MAIN FUNCTION
 //========================================================================================================================================================================================================200
 
-int 
+int platform_id_inuse = 0; // platform id in use (default: 0)
+int device_id_inuse = 0; //device id in use (default : 0)
+
+int
 main(	int argc, 
 		char* argv []){
 
+    printf("WG size of kernel = %d \n", NUMBER_THREADS);
 
-  printf("WG size of kernel = %d \n", NUMBER_THREADS);
+	//======================================================================================================================================================150
+	//	STRUCTURES, GLOBAL STRUCTURE VARIABLES
+	//======================================================================================================================================================150
+
+	params_common common;
+	common.common_mem = sizeof(params_common);
+
+	//======================================================================================================================================================150
+	// 	CHECK INPUT ARGUMENTS
+	//======================================================================================================================================================150
+
+	char* video_file_name = NULL;
+	char* input_file_name = NULL;
+    common.frames_processed = -1;
+
+    for (int i =0; i < argc; ++i) {
+        switch (argv[i][1]) {
+        case 'f':	// -f video file
+            if (++i < argc) {
+                video_file_name = argv[i];
+            } else {
+                printf("Could not read argument after option %s\n", argv[i-1]);
+                return 1;
+            }
+            break;
+        case 'i':	 // -i input file
+            if (++i < argc) {
+                input_file_name = argv[i];
+            } else {
+                printf("Could not read argument after option %s\n", argv[i-1]);
+                return 1;
+            }
+            break;
+        case 'h':
+		    printf("%s <-f video_file> <-i input_file> <-n num_frames> [-p platform_id] [-n device_id]\n", argv[0]);
+            return 0;
+        case 'n':   // -n number of frames
+            if (++i < argc) {
+    		    common.frames_processed = atoi(argv[i]);
+            } else {
+                printf("Could not read argument after option %s\n", argv[i-1]);
+                return 1;
+            }
+            break;
+        case 'p':   // -p platform id
+            if (++i < argc) {
+                platform_id_inuse = atoi(argv[i]);
+            } else {
+                printf("Could not read argument after option %s\n", argv[i-1]);
+                return 1;
+            }
+            break;
+        case 'd':   // -d device id
+            if (++i < argc) {
+                device_id_inuse = atoi(argv[i]);
+            } else {
+                printf("Could not read argument after option %s\n", argv[i-1]);
+                return 1;
+            }
+            break;
+        }
+    }
+
+    if (input_file_name == NULL || video_file_name == NULL) {
+        printf("Input or video file name is missing\n");
+        return 0;
+    }
+
 	//======================================================================================================================================================150
 	//	VARIABLES
 	//======================================================================================================================================================150
+
 
 	// time
 	long long time0;
@@ -67,21 +140,10 @@ main(	int argc,
 	time0 = get_time();
 
 	//======================================================================================================================================================150
-	//	STRUCTURES, GLOBAL STRUCTURE VARIABLES
-	//======================================================================================================================================================150
-
-	params_common common;
-	common.common_mem = sizeof(params_common);
-
-	//======================================================================================================================================================150
 	// 	FRAME INFO
 	//======================================================================================================================================================150
 
-	// variables
-	char* video_file_name;
-
 	// open movie file
- 	video_file_name = (char *) "../../data/heartwall/test.avi";
 	frames = (avi_t*)AVI_open_input_file(video_file_name, 1);														// added casting
 	if (frames == NULL)  {
 		   AVI_print_error((char *) "Error with AVI_open_input_file");
@@ -95,23 +157,12 @@ main(	int argc,
 	common.frame_elem = common.frame_rows * common.frame_cols;
 	common.frame_mem = sizeof(fp) * common.frame_elem;
 
+    if (common.frames_processed<0 || common.frames_processed>common.no_frames){
+        printf("ERROR: %d is an incorrect number of frames specified, select in the range of 0-%d\n", common.frames_processed, common.no_frames);
+        return 0;
+    }
+
 	time1 = get_time();
-
-	//======================================================================================================================================================150
-	// 	CHECK INPUT ARGUMENTS
-	//======================================================================================================================================================150
-
-	if(argc!=2){
-		printf("ERROR: missing argument (number of frames to processed) or too many arguments\n");
-		return 0;
-	}
-	else{
-		common.frames_processed = atoi(argv[1]);
-		if(common.frames_processed<0 || common.frames_processed>common.no_frames){
-			printf("ERROR: %d is an incorrect number of frames specified, select in the range of 0-%d\n", common.frames_processed, common.no_frames);
-			return 0;
-		}
-	}
 
 	time2 = get_time();
 
@@ -123,7 +174,7 @@ main(	int argc,
 	//	READ PARAMETERS FROM FILE
 	//====================================================================================================100
 
-	read_parameters(	"../../data/heartwall/input.txt",
+	read_parameters(	input_file_name,
 						&common.tSize,
 						&common.sSize,
 						&common.maxMove,
@@ -133,7 +184,7 @@ main(	int argc,
 	//	READ SIZE OF INPUTS FROM FILE
 	//====================================================================================================100
 
-	read_header(	"../../data/heartwall/input.txt",
+	read_header(	input_file_name,
 					&common.endoPoints,
 					&common.epiPoints);
 
