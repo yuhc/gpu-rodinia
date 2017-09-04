@@ -40,6 +40,7 @@ $(EXE):	./main.o \
 			./util/file/file.o \
 			./util/timer/timer.o \
 			./util/opencl/opencl.o \
+			../util/timing.c \
 			-lm \
 			$(OCL_LIB_DIR) \
 			$(OCL_LIB) -o $(EXE)
@@ -68,6 +69,8 @@ run: $(EXE)
 			-c \
 			-o ./kernel/kernel_gpu_opencl_wrapper.o \
 			-O3 \
+			-I../util \
+			-DTIMING \
 			$(OCL_INC_DIR)
 
 # ======================================================================================================================================================150

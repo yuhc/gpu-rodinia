@@ -25,6 +25,7 @@
 #include "./../util/opencl/opencl.h"				// (in directory)							needed by device functions
 #include "./../util/avi/avilib.h"					// (in directory)							needed by avi functions
 #include "./../util/avi/avimod.h"					// (in directory)							needed by avi functions
+#include "timing.h"
 
 //======================================================================================================================================================150
 //	KERNEL_GPU_CUDA_WRAPPER FUNCTION HEADER
@@ -55,6 +56,18 @@ kernel_gpu_opencl_wrapper(	params_common common,
 							int* tEpiColLoc,
 							avi_t* frames)
 {
+#ifdef TIMING
+	struct timeval tv;
+	struct timeval tv_total_start, tv_total_end;
+	struct timeval tv_init_end;
+	struct timeval tv_h2d_start, tv_h2d_end;
+	struct timeval tv_d2h_start, tv_d2h_end;
+	struct timeval tv_kernel_start, tv_kernel_end;
+	struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+	struct timeval tv_close_start, tv_close_end;
+	float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time= 0,
+		  d2h_time = 0, close_time = 0, total_time = 0;
+#endif
 
 	//======================================================================================================================================================150
 	//	CPU VARIABLES
@@ -73,6 +86,10 @@ kernel_gpu_opencl_wrapper(	params_common common,
 
 	// common variables
 	int error;
+
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
 
 	//====================================================================================================100
 	//	GET PLATFORMS (Intel, AMD, NVIDIA, based on provided library), SELECT ONE
@@ -194,10 +211,11 @@ kernel_gpu_opencl_wrapper(	params_common common,
 
 	// Create a command queue
 	cl_command_queue command_queue;
-	command_queue = clCreateCommandQueue(	context, 
-											device, 
-											0, 
-											&error);
+#ifdef TIMING
+	command_queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &error);
+#else
+	command_queue = clCreateCommandQueue(context, device, 0, &error);
+#endif
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -220,7 +238,7 @@ kernel_gpu_opencl_wrapper(	params_common common,
 
 
   char clOptions[150];
-//  sprintf(clOptions,"-I../../src");                                                    
+//  sprintf(clOptions,"-I../../src");
   sprintf(clOptions,"-I.");
 #ifdef RD_WG_SIZE
   sprintf(clOptions + strlen(clOptions), " -DRD_WG_SIZE=%d", RD_WG_SIZE);
@@ -261,6 +279,12 @@ kernel_gpu_opencl_wrapper(	params_common common,
 							&error);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	//====================================================================================================100
 	//	TRIGGERING INITIAL DRIVER OVERHEAD
@@ -715,6 +739,12 @@ kernel_gpu_opencl_wrapper(	params_common common,
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
+#ifdef  TIMING
+	gettimeofday(&tv_mem_alloc_end, NULL);
+	tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+	mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	//====================================================================================================100
 	//	END
 	//====================================================================================================100
@@ -731,6 +761,7 @@ kernel_gpu_opencl_wrapper(	params_common common,
 	// endo points
 	//==================================================50
 
+	cl_event event;
 	error = clEnqueueWriteBuffer(	command_queue, 
 									d_endoRow, 
 									1, 
@@ -739,9 +770,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 									endoRow, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	error = clEnqueueWriteBuffer(	command_queue, 
 									d_endoCol, 
@@ -751,9 +786,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 									endoCol, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	// epi points
@@ -767,9 +806,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 									epiRow, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	error = clEnqueueWriteBuffer(	command_queue, 
 									d_epiCol, 
@@ -779,9 +822,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 									epiCol, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//==================================================50
 	//	END
@@ -819,9 +866,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 									&common, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//====================================================================================================100
 	//	set kernel arguments
@@ -1018,6 +1069,9 @@ kernel_gpu_opencl_wrapper(	params_common common,
 	// local_size = (common.in_elem + common.in_cols + common.in_sqr_rows + common.mask_conv_rows) * 4 + common.mask_conv_rows * 2;
 	// printf("size of used local memory/workgroup = %dB (ensure that device can handle)\n", local_size);
 
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 	cl_mem d_in_mod_temp;
 	d_in_mod_temp = clCreateBuffer(	context, 
 									CL_MEM_READ_WRITE, 
@@ -1083,7 +1137,11 @@ kernel_gpu_opencl_wrapper(	params_common common,
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
-
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	error = clSetKernelArg(	kernel, 
 							25, 
@@ -1135,7 +1193,9 @@ kernel_gpu_opencl_wrapper(	params_common common,
 		fatal_CL(error, __LINE__);
 
 
-
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 	cl_mem d_checksum;
 	d_checksum = clCreateBuffer(context, 
 								CL_MEM_READ_WRITE, 
@@ -1144,6 +1204,11 @@ kernel_gpu_opencl_wrapper(	params_common common,
 								&error );
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	error = clSetKernelArg(	kernel, 
 							33, 
@@ -1189,9 +1254,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 										frame, 
 										0, 
 										0, 
-										0);
+										&event);
 		if (error != CL_SUCCESS) 
 			fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 		//==================================================50
 		//	kernel arguments that change inside this loop
@@ -1223,9 +1292,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 										local_work_size, 
 										0, 
 										NULL, 
-										NULL);
+										&event);
 		if (error != CL_SUCCESS) 
 			fatal_CL(error, __LINE__);
+#ifdef TIMING
+    kernel_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 		//==================================================50
 		//	finish iteration
@@ -1262,9 +1335,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 									checksum,
 									0,
 									NULL,
-									NULL);
+									&event);
 		if (error != CL_SUCCESS) 
 			fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 		printf("CHECKSUM:\n");
 		for(i=0; i<CHECK; i++){
 				printf("%f ", checksum[i]);
@@ -1301,9 +1378,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 								tEndoRowLoc,
 								0,
 								NULL,
-								NULL);
+								&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	// for testing of the output
 #ifdef TEST_OUTPUT
@@ -1325,9 +1406,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 								tEndoColLoc,
 								0,
 								NULL,
-								NULL);
+								&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//====================================================================================================100
 	// epi points
@@ -1341,9 +1426,13 @@ kernel_gpu_opencl_wrapper(	params_common common,
 								tEpiRowLoc,
 								0,
 								NULL,
-								NULL);
+								&event);
 	if (error != CL_SUCCESS) 
-		fatal_CL(error, __LINE__);;
+		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	error = clEnqueueReadBuffer(command_queue,
 								d_tEpiColLoc,
@@ -1353,13 +1442,21 @@ kernel_gpu_opencl_wrapper(	params_common common,
 								tEpiColLoc,
 								0,
 								NULL,
-								NULL);
+								&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event,command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//======================================================================================================================================================150
 	//	DEALLOCATION
 	//======================================================================================================================================================150
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
 
 	// OpenCL structures
 	error = clReleaseKernel(kernel);
@@ -1459,6 +1556,22 @@ kernel_gpu_opencl_wrapper(	params_common common,
 	//	End
 	//======================================================================================================================================================150
 
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Time spent in different stages of the application:\n");
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
 }
 
 //========================================================================================================================================================================================================200
