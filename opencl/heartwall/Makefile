@@ -26,7 +26,7 @@ OCL_LIB = -lOpenCL
 			./util/opencl/opencl.o \
 			-lm \
 			$(OCL_LIB_DIR) \
-			$(OCL_LIB) -o heartwall
+			$(OCL_LIB) -o heartwall.out
 
 # ======================================================================================================================================================150
 #	MAIN FUNCTION
@@ -92,7 +92,7 @@ OCL_LIB = -lOpenCL
 			$(OCL_INC_DIR)
 
 clean:
-	rm	*.o heartwall \
+	rm	*.o heartwall.out \
 		./kernel/*.o \
 		./util/avi/*.o \
 		./util/file/*.o \
