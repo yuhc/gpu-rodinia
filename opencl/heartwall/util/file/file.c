@@ -228,7 +228,7 @@ void write_data(	char* filename,
 	for(j=0; j<frames_processed;j++)
 	  {
 	    fprintf(fid, "\n---Frame %d---",j);
-	    fprintf(fid, "\n--endo--\n",j);
+	    fprintf(fid, "\n--endo %d--\n",j);
 	    for(i=0; i<endoPoints; i++){
 	      fprintf(fid, "%d\t", input_a[j+i*frameNo]);
 	    }
@@ -237,7 +237,7 @@ void write_data(	char* filename,
 	      // if(input_b[j*size+i] > 2000) input_b[j*size+i]=0;
 	      fprintf(fid, "%d\t", input_b[j+i*frameNo]);
 	    }
-	    fprintf(fid, "\n--epi--\n",j);
+	    fprintf(fid, "\n--epi %d--\n",j);
 	    for(i=0; i<epiPoints; i++){
 	      //if(input_2a[j*size_2+i] > 2000) input_2a[j*size_2+i]=0;
 	      fprintf(fid, "%d\t", input_2a[j+i*frameNo]);

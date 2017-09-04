@@ -96,7 +96,7 @@ run: $(EXE)
 	$(C_C)	./util/file/file.c \
 			-c \
 			-o ./util/file/file.o \
-			-O3
+			-O3 -Wno-unused-result
 
 ./util/timer/timer.o:	./util/timer/timer.h \
 						./util/timer/timer.c
