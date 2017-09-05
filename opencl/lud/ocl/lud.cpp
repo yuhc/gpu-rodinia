@@ -48,34 +48,39 @@ static cl_context	    context;
 static cl_command_queue cmd_queue;
 static cl_device_type   device_type;
 static cl_device_id   * device_list;
-static cl_int           num_devices;
+static cl_uint          num_devices;
+static cl_uint          num_platforms;
 
-static int initialize(int use_gpu)
+static int initialize(int platform_id_inuse, int device_id_inuse)
 {
-	cl_int result;
-	size_t size;
+    // get OpenCL platforms
+	if (clGetPlatformIDs(0, NULL, &num_platforms) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(0,0,*) failed\n"); return -1; }
+	cl_platform_id all_platform_id[num_platforms];
+	if (clGetPlatformIDs(num_platforms, all_platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(*,*,0) failed\n"); return -1; }
+    cl_platform_id platform_id = all_platform_id[platform_id_inuse];
+
+    // get device
+    if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, 0, NULL, &num_devices) != CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
+	printf("num_devices = %d\n", num_devices);
+    if (device_id_inuse > num_devices) {
+        printf("Invalid Device Number\n");
+        return -1;
+    }
+	cl_device_id *device_list = new cl_device_id[num_devices];
+	if( !device_list ) { printf("ERROR: new cl_device_id[] failed\n"); return -1; }
+    if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, num_devices, device_list, NULL) != CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
+
+    // get device type
+    if (clGetDeviceInfo(device_list[device_id_inuse], CL_DEVICE_TYPE, sizeof(device_type), (void *)&device_type, NULL)!= CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
 
 	// create OpenCL context
-	cl_platform_id platform_id;
-	if (clGetPlatformIDs(1, &platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(1,*,0) failed\n"); return -1; }
 	cl_context_properties ctxprop[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0};
-	device_type = use_gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU;
 	context = clCreateContextFromType( ctxprop, device_type, NULL, NULL, NULL );
-	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", use_gpu ? "GPU" : "CPU"); return -1; }
-
-	// get the list of GPUs
-	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, 0, NULL, &size );
-	num_devices = (int) (size / sizeof(cl_device_id));
-	printf("num_devices = %d\n", num_devices);
-	
-	if( result != CL_SUCCESS || num_devices < 1 ) { printf("ERROR: clGetContextInfo() failed\n"); return -1; }
-	device_list = new cl_device_id[num_devices];
-	if( !device_list ) { printf("ERROR: new cl_device_id[] failed\n"); return -1; }
-	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, size, device_list, NULL );
-	if( result != CL_SUCCESS ) { printf("ERROR: clGetContextInfo() failed\n"); return -1; }
+	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU"); return -1; }
+	printf("Create %s context\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU");
 
 	// create command queue for the first device
-	cmd_queue = clCreateCommandQueue( context, device_list[0], 0, NULL );
+	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], 0, NULL );
 	if( !cmd_queue ) { printf("ERROR: clCreateCommandQueue() failed\n"); return -1; }
 	return 0;
 }
@@ -105,6 +110,8 @@ static struct option long_options[] = {
       {"input", 1, NULL, 'i'},
       {"size", 1, NULL, 's'},
       {"verify", 0, NULL, 'v'},
+      {"platform", 1, NULL, 'p'},
+      {"device", 1, NULL, 'd'},
       {0,0,0,0}
 };
 
@@ -118,8 +125,10 @@ main ( int argc, char *argv[] )
 	const char *input_file = NULL;
 	float *m, *mm;
 	stopwatch sw;
-	
-	while ((opt = getopt_long(argc, argv, "::vs:i:", 
+	int platform_id_inuse = 0;
+	int device_id_inuse = 0;
+
+	while ((opt = getopt_long(argc, argv, "::vs:i:p:d:", 
                             long_options, &option_index)) != -1 ) {
 		switch(opt){
 			case 'i':
@@ -135,6 +144,12 @@ main ( int argc, char *argv[] )
 			// fprintf(stderr, "Usage: %s [-v] [-s matrix_size|-i input_file]\n", argv[0]);
 			// exit(EXIT_FAILURE);
 			break;
+        case 'p':
+			platform_id_inuse = atoi(optarg);
+            break;
+        case 'd':
+			device_id_inuse = atoi(optarg);
+            break;
         case '?':
 			fprintf(stderr, "invalid option\n");
 			break;
@@ -196,10 +211,8 @@ main ( int argc, char *argv[] )
 	fread(source + strlen(source), sourcesize, 1, fp);
 	fclose(fp);
 
-	// Use 1: GPU  0: CPU
-	int use_gpu = 1;
 	// OpenCL initialization
-	if(initialize(use_gpu)) return -1;
+	if(initialize(platform_id_inuse, device_id_inuse)) return -1;
 	// compile kernel
 	cl_int err = 0;
 	const char * slist[2] = { source, 0 };
@@ -266,9 +279,11 @@ main ( int argc, char *argv[] )
 	  
 	  size_t global_work2[3] = {BLOCK_SIZE * 2 * ((matrix_dim-i)/BLOCK_SIZE-1), 1, 1};
 	  size_t local_work2[3]  = {BLOCK_SIZE * 2, 1, 1};
-	  
-	  err = clEnqueueNDRangeKernel(cmd_queue, perimeter, 2, NULL, global_work2, local_work2, 0, 0, 0);
-	  if(err != CL_SUCCESS) { printf("ERROR:  perimeter clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
+      // Intel OCL does not support 0 size
+      if (global_work2[0] > 0) {
+          err = clEnqueueNDRangeKernel(cmd_queue, perimeter, 2, NULL, global_work2, local_work2, 0, 0, 0);
+          if(err != CL_SUCCESS) { printf("ERROR:  perimeter clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
+      }
 	  
 	  clSetKernelArg(internal, 0, sizeof(void *), (void*) &d_m);
 	  clSetKernelArg(internal, 1, sizeof(float) * BLOCK_SIZE * BLOCK_SIZE, (void*)NULL );
@@ -278,9 +293,11 @@ main ( int argc, char *argv[] )
       
 	  size_t global_work3[3] = {BLOCK_SIZE * ((matrix_dim-i)/BLOCK_SIZE-1), BLOCK_SIZE * ((matrix_dim-i)/BLOCK_SIZE-1), 1};
 	  size_t local_work3[3] = {BLOCK_SIZE, BLOCK_SIZE, 1};
-
-	  err = clEnqueueNDRangeKernel(cmd_queue, internal, 2, NULL, global_work3, local_work3, 0, 0, 0);
-	  if(err != CL_SUCCESS) { printf("ERROR:  internal clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
+      // Intel OCL does not support 0 size
+      if (global_work3[0] > 0) {
+          err = clEnqueueNDRangeKernel(cmd_queue, internal, 2, NULL, global_work3, local_work3, 0, 0, 0);
+          if(err != CL_SUCCESS) { printf("ERROR:  internal clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
+      }
 	}
 	clSetKernelArg(diagnal, 0, sizeof(void *), (void*) &d_m);
 	clSetKernelArg(diagnal, 1, sizeof(float) * BLOCK_SIZE * BLOCK_SIZE, (void*)NULL );
@@ -291,6 +308,7 @@ main ( int argc, char *argv[] )
 	size_t local_work1[3]  = {BLOCK_SIZE, 1, 1};
 	err = clEnqueueNDRangeKernel(cmd_queue, diagnal, 2, NULL, global_work1, local_work1, 0, 0, 0);
 	if(err != CL_SUCCESS) { printf("ERROR:  diagnal clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
+	clFinish(cmd_queue);
 	
 	err = clEnqueueReadBuffer(cmd_queue, d_m, 1, 0, matrix_dim*matrix_dim*sizeof(float), m, 0, 0, 0);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueReadBuffer  d_m (size:%d) => %d\n", matrix_dim*matrix_dim, err); return -1; }
