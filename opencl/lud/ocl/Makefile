@@ -23,8 +23,10 @@ EXE = lud.out
 
 $(EXE): lud.cpp
 	$(CC) $(KERNEL_DIM) $(CC_FLAGS) \
-		-o $(EXE) lud.cpp ../common/common.c \
+		-o $(EXE) \
+		lud.cpp ../common/common.c ../../util/timing.c \
 		$(INC) $(LIB) -lOpenCL \
+		-I../../util -DTIMING \
 		-Wno-unused-result
 
 clean:
