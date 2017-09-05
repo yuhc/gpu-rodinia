@@ -2,6 +2,22 @@
 #define __NEAREST_NEIGHBOR__
 
 #include "nearestNeighbor.h"
+#include "timing.h"
+
+#ifdef TIMING
+#define PROFILING
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
 
 cl_context context=NULL;
 
@@ -36,8 +52,16 @@ int main(int argc, char *argv[]) {
 
   if (resultsCount > numRecords) resultsCount = numRecords;
 
+#ifdef  TIMING
+  gettimeofday(&tv_total_start, NULL);
+#endif
   context = cl_init_context(platform,device,quiet);
-  
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
   recordDistances = OpenClFindNearestNeighbors(context,numRecords,locations,lat,lng,timing);
 
   // find the resultsCount least distances
@@ -77,11 +101,19 @@ float *OpenClFindNearestNeighbors(
 
     cl_int error=0;
 
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
     d_locations = clCreateBuffer(context, CL_MEM_READ_ONLY,
         sizeof(LatLong) * numRecords, NULL, &error);
 
     d_distances = clCreateBuffer(context, CL_MEM_READ_WRITE,
         sizeof(float) * numRecords, NULL, &error);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
     cl_command_queue command_queue = cl_getCommandQueue();
     cl_event writeEvent,kernelEvent,readEvent;
@@ -135,6 +167,7 @@ float *OpenClFindNearestNeighbors(
 
     cl_errChk(error,"ERROR with clEnqueueReadBuffer",true);
     if (timing) {
+#ifdef TIMING
         clFinish(command_queue);
         cl_ulong eventStart,eventEnd,totalTime=0;
         printf("# Records\tWrite(s) [size]\t\tKernel(s)\tRead(s)  [size]\t\tTotal(s)\n");
@@ -149,6 +182,8 @@ float *OpenClFindNearestNeighbors(
 
         printf("%f [%.2fMB]\t",(float)((eventEnd-eventStart)/1e9),(float)((sizeof(LatLong) * numRecords)/1e6));
         totalTime += eventEnd-eventStart;
+		h2d_time = (eventEnd - eventStart) / 1e6;
+
         // Kernel
         error = clGetEventProfilingInfo(kernelEvent,CL_PROFILING_COMMAND_START,
                                         sizeof(cl_ulong),&eventStart,NULL);
@@ -159,6 +194,8 @@ float *OpenClFindNearestNeighbors(
 
         printf("%f\t",(float)((eventEnd-eventStart)/1e9));
         totalTime += eventEnd-eventStart;
+		kernel_time = (eventEnd - eventStart) / 1e6;
+
         // Read Buffer
         error = clGetEventProfilingInfo(readEvent,CL_PROFILING_COMMAND_START,
                                         sizeof(cl_ulong),&eventStart,NULL);
@@ -169,12 +206,33 @@ float *OpenClFindNearestNeighbors(
 
         printf("%f [%.2fMB]\t",(float)((eventEnd-eventStart)/1e9),(float)((sizeof(float) * numRecords)/1e6));
         totalTime += eventEnd-eventStart;
-        
+		d2h_time = (eventEnd - eventStart) / 1e6;
+
         printf("%f\n\n",(float)(totalTime/1e9));
+#endif
     }
+
     // 6. return finalized data and release buffers
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
     clReleaseMemObject(d_locations);
     clReleaseMemObject(d_distances);
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
 	return distances;
 }
 
