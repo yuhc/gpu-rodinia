@@ -7,10 +7,10 @@ SRC = nearestNeighbor.cpp clutils.cpp utils.cpp
 
 CC_FLAGS = -g -O3
 
-EXE = nn
+EXE = nn.out
 
 release:
-	$(CC) $(CC_FLAGS) -lOpenCL  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB)
+	$(CC) $(CC_FLAGS)  -fopenmp $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -lOpenCL
 	
 clean: 
 	rm -f $(EXE) 

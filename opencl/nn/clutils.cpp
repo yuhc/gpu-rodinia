@@ -251,7 +251,7 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 	// cl_platform_id platform = NULL;
 
 	status = clGetPlatformIDs(0, NULL, &numPlatforms);
-	if (printInfo) printf("Number of platforms detected:%d\n", numPlatforms);
+	printf("Number of platforms detected:%d\n", numPlatforms);
 
 	// Print some information about the available platforms
 	cl_platform_id *platforms = NULL;
@@ -268,10 +268,10 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 		for(unsigned int i = 0; i < numPlatforms ; i++)
 		{
 			char pbuf[100];
-			if (printInfo) printf("Platform %d:\t", i);
+			printf("Platform %d:\t", i);
 			status = clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR,
 				sizeof(pbuf), pbuf, NULL);
-			if (printInfo) printf("Vendor: %s\n", pbuf);
+			printf("Vendor: %s\n", pbuf);
 
 			//unsigned int numDevices;
 
@@ -298,14 +298,14 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 			{
 				char dbuf[100];
 				char deviceStr[100];
-				if (printInfo) printf("\tDevice: %d\t", j);
+				printf("\tDevice: %d\t", j);
 				status = clGetDeviceInfo(devices[j], CL_DEVICE_VENDOR, sizeof(dbuf),
 					deviceStr, NULL);
 				cl_errChk(status, "Getting Device Info\n",true);
-			    if (printInfo) printf("Vendor: %s", deviceStr);
+			    printf("Vendor: %s", deviceStr);
 				status = clGetDeviceInfo(devices[j], CL_DEVICE_NAME, sizeof(dbuf),
 					dbuf, NULL);
-				if (printInfo) printf("\n\t\tName: %s\n", dbuf);
+				printf("\n\t\tName: %s\n", dbuf);
 			}
 		}
 	}
