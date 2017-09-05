@@ -9,7 +9,9 @@ LINKFLAGS = -L$(OPENCL_LIB)
 
 # link objects(binaries) together
 a.out: main.o OpenCL.o
-	$(CXX) main.o OpenCL.o $(LINKFLAGS) -o pathfinder
+	$(CXX) $(LINKFLAGS) main.o OpenCL.o \
+		-o pathfinder.out \
+		-lOpenCL
 
 # compile main function file into object (binary)
 main.o: main.cpp OpenCL.cpp kernels.cl
@@ -17,4 +19,7 @@ main.o: main.cpp OpenCL.cpp kernels.cl
 
 clean:
 	clear
-	@rm -f pathfinder *.o *.out *~ *\#
+	@rm -f pathfinder.out *.o *.out *~ *\#
+
+run: a.out
+	./pathfinder.out 100000 100 20 > result.txt
