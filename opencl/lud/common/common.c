@@ -38,7 +38,7 @@ get_interval_by_usec(stopwatch *sw){
 }
 
 func_ret_t 
-create_matrix_from_file(float **mp, const char* filename, int *size_p){
+create_matrix_from_file(float **mp, const char* filename, size_t *size_p){
   int i, j, size;
   float *m;
   FILE *fp = NULL;
@@ -110,6 +110,7 @@ create_matrix_from_random(float **mp, int size){
       }
   }
 
+  m = (float*)malloc(size*size*sizeof(float));
   for (i=0; i < size; i++) {
       for (j=0; j < size; j++) {
           for (k=0; k <= MIN(i,j); k++)
@@ -136,7 +137,7 @@ matrix_multiply(float *inputa, float *inputb, float *output, int size){
 
 }
 
-func_ret_t
+void
 lud_verify(float *m, float *lu, int matrix_dim){
   int i,j,k;
   float *tmp = (float*)malloc(matrix_dim*matrix_dim*sizeof(float));

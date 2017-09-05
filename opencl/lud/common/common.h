@@ -38,7 +38,7 @@ int
 get_interval_by_usec(stopwatch *sw);
 
 func_ret_t
-create_matrix_from_file(float **mp, const char *filename, int *size_p);
+create_matrix_from_file(float **mp, const char *filename, size_t *size_p);
 
 func_ret_t
 create_matrix_from_random(float **mp, int size);
@@ -46,7 +46,7 @@ create_matrix_from_random(float **mp, int size);
 func_ret_t
 create_matrix(float **mp, int size);
 
-func_ret_t
+void
 lud_verify(float *m, float *lu, int size);
 
 void

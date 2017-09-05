@@ -62,7 +62,7 @@ static int initialize(int platform_id_inuse, int device_id_inuse)
     // get device
     if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, 0, NULL, &num_devices) != CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
 	printf("num_devices = %d\n", num_devices);
-    if (device_id_inuse > num_devices) {
+    if (device_id_inuse > (int)num_devices) {
         printf("Invalid Device Number\n");
         return -1;
     }
@@ -119,7 +119,7 @@ int
 main ( int argc, char *argv[] )
 {
   printf("WG size of kernel = %d X %d\n", BLOCK_SIZE, BLOCK_SIZE);
-	int matrix_dim = 32; /* default matrix_dim */
+	size_t matrix_dim = 32; /* default matrix_dim */
 	int opt, option_index=0;
 	func_ret_t ret;
 	const char *input_file = NULL;
@@ -139,7 +139,7 @@ main ( int argc, char *argv[] )
 			break;
         case 's':
 			matrix_dim = atoi(optarg);
-			printf("Generate input matrix internally, size =%d\n", matrix_dim);
+			printf("Generate input matrix internally, size =%lu\n", matrix_dim);
 			// fprintf(stderr, "Currently not supported, use -i instead\n");
 			// fprintf(stderr, "Usage: %s [-v] [-s matrix_size|-i input_file]\n", argv[0]);
 			// exit(EXIT_FAILURE);
@@ -179,11 +179,11 @@ main ( int argc, char *argv[] )
 	} 
 	
 	else if (matrix_dim) {
-	  printf("Creating matrix internally size=%d\n", matrix_dim);
+	  printf("Creating matrix internally size=%lu\n", matrix_dim);
 	  ret = create_matrix(&m, matrix_dim);
 	  if (ret != RET_SUCCESS) {
 	    m = NULL;
-	    fprintf(stderr, "error create matrix internally size=%d\n", matrix_dim);
+	    fprintf(stderr, "error create matrix internally size=%lu\n", matrix_dim);
 	    exit(EXIT_FAILURE);
 	  }
 	}
@@ -203,11 +203,11 @@ main ( int argc, char *argv[] )
 	char * source = (char *)calloc(sourcesize, sizeof(char)); 
 	if(!source) { printf("ERROR: calloc(%d) failed\n", sourcesize); return -1; }
 
-	char * kernel_lud_diag   = "lud_diagonal";
-	char * kernel_lud_peri   = "lud_perimeter";
-	char * kernel_lud_inter  = "lud_internal";
+	const char * kernel_lud_diag   = "lud_diagonal";
+	const char * kernel_lud_peri   = "lud_perimeter";
+	const char * kernel_lud_inter  = "lud_internal";
 	FILE * fp = fopen("./lud_kernel.cl", "rb"); 
-	if(!fp) { printf("ERROR: unable to open '%s'\n"); return -1; }
+	if(!fp) { printf("ERROR: unable to open '%s'\n", "./lud_kernel.cl"); return -1; }
 	fread(source + strlen(source), sourcesize, 1, fp);
 	fclose(fp);
 
@@ -249,14 +249,14 @@ main ( int argc, char *argv[] )
   
 	cl_mem d_m;
 	d_m = clCreateBuffer(context, CL_MEM_READ_WRITE, matrix_dim*matrix_dim * sizeof(float), NULL, &err );
-	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer d_m (size:%d) => %d\n", matrix_dim*matrix_dim, err); return -1;} 
+	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer d_m (size:%lu) => %d\n", matrix_dim*matrix_dim, err); return -1;} 
 
 	/* beginning of timing point */
 	stopwatch_start(&sw);
 	err = clEnqueueWriteBuffer(cmd_queue, d_m, 1, 0, matrix_dim*matrix_dim*sizeof(float), m, 0, 0, 0);
-	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer d_m (size:%d) => %d\n", matrix_dim*matrix_dim, err); return -1; }
+	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer d_m (size:%lu) => %d\n", matrix_dim*matrix_dim, err); return -1; }
 	
-	int i=0;
+	size_t i=0;
 	for (i=0; i < matrix_dim-BLOCK_SIZE; i += BLOCK_SIZE) {
 	 
 	  clSetKernelArg(diagnal, 0, sizeof(void *), (void*) &d_m);
@@ -311,7 +311,7 @@ main ( int argc, char *argv[] )
 	clFinish(cmd_queue);
 	
 	err = clEnqueueReadBuffer(cmd_queue, d_m, 1, 0, matrix_dim*matrix_dim*sizeof(float), m, 0, 0, 0);
-	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueReadBuffer  d_m (size:%d) => %d\n", matrix_dim*matrix_dim, err); return -1; }
+	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueReadBuffer  d_m (size:%lu) => %d\n", matrix_dim*matrix_dim, err); return -1; }
 	clFinish(cmd_queue);
 	/* end of timing point */
 	stopwatch_stop(&sw);
