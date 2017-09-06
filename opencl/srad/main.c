@@ -17,6 +17,7 @@
 
 #include <stdio.h>									// (in path known to compiler)	needed by printf
 #include <stdlib.h>									// (in path known to compiler)	needed by malloc, free
+#include <string.h>
 
 //======================================================================================================================================================150
 //	HEADER
@@ -46,6 +47,9 @@
 //	MAIN FUNCTION
 //========================================================================================================================================================================================================200
 
+int platform_id_inuse = 0;            // platform id in use (default: 0)
+int device_id_inuse = 0;              // device id in use (default : 0)
+
 int 
 main(	int argc, 
 		char* argv []){
@@ -53,15 +57,6 @@ main(	int argc,
 	//======================================================================================================================================================150
 	// 	VARIABLES
 	//======================================================================================================================================================150
-
-	// time
-	long long time0;
-	long long time1;
-	long long time2;
-	long long time3;
-	long long time4;
-	long long time5;
-	long long time6;
 
 	// inputs image, input paramenters
 	fp* image_ori;																// originalinput image
@@ -86,7 +81,7 @@ main(	int argc,
 	int* iN;
 	int* iS;
 	int* jE;
-	int* jW;    
+	int* jW;
 
 	// counters
 	int iter;   // primary loop
@@ -97,24 +92,44 @@ main(	int argc,
 	int mem_size_i;
 	int mem_size_j;
 
-	time0 = get_time();
-
 	//======================================================================================================================================================150
 	//	INPUT ARGUMENTS
 	//======================================================================================================================================================150
 
-	if(argc != 5){
-		printf("ERROR: wrong number of arguments\n");
-		return 0;
-	}
-	else{
-		niter = atoi(argv[1]);
-		lambda = atof(argv[2]);
-		Nr = atoi(argv[3]);						// it is 502 in the original image
-		Nc = atoi(argv[4]);						// it is 458 in the original image
-	}
-
-	time1 = get_time();
+    int cur_arg;
+	for (cur_arg = 1; cur_arg<argc; cur_arg++) {
+        if (strcmp(argv[cur_arg], "-n") == 0) {
+            if (argc >= cur_arg + 1) {
+		        niter = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-l") == 0) {
+            if (argc >= cur_arg + 1) {
+		        lambda = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-s") == 0) {
+            if (argc >= cur_arg + 3) {
+                Nr = atoi(argv[cur_arg+1]);			// it is 502 in the original image
+        		Nc = atoi(argv[cur_arg+2]);			// it is 458 in the original image
+                cur_arg += 2;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-p") == 0) {
+            if (argc >= cur_arg + 1) {
+                platform_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-d") == 0) {
+            if (argc >= cur_arg + 1) {
+                device_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+    }
 
 	//======================================================================================================================================================150
 	// 	READ INPUT FROM FILE
@@ -156,8 +171,6 @@ main(	int argc,
 	// 	End
 	//====================================================================================================100
 
-	time2 = get_time();
-
 	//======================================================================================================================================================150
 	// 	SETUP
 	//======================================================================================================================================================150
@@ -195,28 +208,24 @@ main(	int argc,
 	jW[0]    = 0;															// changes IMAGE leftmost column index from -1 to 0
 	jE[Nc-1] = Nc-1;														// changes IMAGE rightmost column index from Nc to Nc-1
 
-	time3= get_time();
-
 	//======================================================================================================================================================150
 	// 	KERNEL
 	//======================================================================================================================================================150
 
-	kernel_gpu_opencl_wrapper(	image,											// input image
-								Nr,												// IMAGE nbr of rows
-								Nc,												// IMAGE nbr of cols
-								Ne,												// IMAGE nbr of elem
-								niter,											// nbr of iterations
-								lambda,											// update step size
-								NeROI,											// ROI nbr of elements
+	kernel_gpu_opencl_wrapper(	image,										// input image
+								Nr,											// IMAGE nbr of rows
+								Nc,											// IMAGE nbr of cols
+								Ne,											// IMAGE nbr of elem
+								niter,										// nbr of iterations
+								lambda,										// update step size
+								NeROI,										// ROI nbr of elements
 								iN,
 								iS,
 								jE,
 								jW,
-								iter,											// primary loop
+								iter,										// primary loop
 								mem_size_i,
 								mem_size_j);
-
-	time4 = get_time();
 
 	//======================================================================================================================================================150
 	// 	WRITE OUTPUT IMAGE TO FILE
@@ -229,7 +238,6 @@ main(	int argc,
 					1,
 					255);
 
-	time5 = get_time();
 
 	//======================================================================================================================================================150
 	// 	FREE MEMORY
@@ -242,22 +250,9 @@ main(	int argc,
 	free(jW); 
 	free(jE);
 
-	time6 = get_time();
-
 	//======================================================================================================================================================150
 	//	DISPLAY TIMING
 	//======================================================================================================================================================150
-
-	printf("Time spent in different stages of the application:\n");
-	printf("%.12f s, %.12f % : READ COMMAND LINE PARAMETERS\n", 						(fp) (time1-time0) / 1000000, (fp) (time1-time0) / (fp) (time5-time0) * 100);
-	printf("%.12f s, %.12f % : READ AND RESIZE INPUT IMAGE FROM FILE\n", 				(fp) (time2-time1) / 1000000, (fp) (time2-time1) / (fp) (time5-time0) * 100);
-	printf("%.12f s, %.12f % : SETUP\n", 												(fp) (time3-time2) / 1000000, (fp) (time3-time2) / (fp) (time5-time0) * 100);
-	printf("%.12f s, %.12f % : KERNEL\n", 												(fp) (time4-time3) / 1000000, (fp) (time4-time3) / (fp) (time5-time0) * 100);
-	printf("%.12f s, %.12f % : WRITE OUTPUT IMAGE TO FILE\n", 							(fp) (time5-time4) / 1000000, (fp) (time5-time4) / (fp) (time5-time0) * 100);
-	printf("%.12f s, %.12f % : FREE MEMORY\n", 											(fp) (time6-time5) / 1000000, (fp) (time6-time5) / (fp) (time5-time0) * 100);
-	printf("Total time:\n");
-	printf("%.12f s\n", 																(fp) (time5-time0) / 1000000);
-
 }
 
 //========================================================================================================================================================================================================200

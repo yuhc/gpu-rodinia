@@ -18,6 +18,7 @@ OCL_LIB = -lOpenCL
 			./util/graphics/graphics.o \
 			./util/graphics/resize.o \
 			./util/timer/timer.o \
+			../util/timing.c \
 			-lm \
 			$(OCL_LIB_DIR) \
 			$(OCL_LIB) -o srad.out
@@ -43,7 +44,8 @@ OCL_LIB = -lOpenCL
 			-c \
 			-o ./kernel/kernel_gpu_opencl_wrapper.o \
 			-O3 \
-			$(OCL_INC_DIR)
+			$(OCL_INC_DIR) \
+			-I../util -DTIMING
 
 # ======================================================================================================================================================150
 #	UTILITIES
@@ -54,7 +56,8 @@ OCL_LIB = -lOpenCL
 	$(C_C)	./util/graphics/graphics.c \
 			-c \
 			-o ./util/graphics/graphics.o \
-			-O3
+			-O3 \
+			-Wno-unused-result
 
 ./util/graphics/resize.o:	./util/graphics/resize.h \
 							./util/graphics/resize.c

@@ -26,6 +26,7 @@
 //======================================================================================================================================================150
 
 #include "./../util/opencl/opencl.h"				// (in directory)							needed by device functions
+#include "timing.h"
 
 //======================================================================================================================================================150
 //	KERNEL_GPU_CUDA_WRAPPER FUNCTION HEADER
@@ -40,6 +41,9 @@
 //========================================================================================================================================================================================================200
 //	KERNEL_GPU_CUDA_WRAPPER FUNCTION
 //========================================================================================================================================================================================================200
+
+extern int platform_id_inuse;
+extern int device_id_inuse;
 
 void 
 kernel_gpu_opencl_wrapper(	fp* image,											// input image
@@ -66,6 +70,21 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	//	COMMON VARIABLES
 	//====================================================================================================100
 
+#ifdef TIMING
+    struct timeval tv;
+    struct timeval tv_total_start, tv_total_end;
+    struct timeval tv_init_end;
+    struct timeval tv_h2d_start, tv_h2d_end;
+    struct timeval tv_d2h_start, tv_d2h_end;
+    struct timeval tv_kernel_start, tv_kernel_end;
+    struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+    struct timeval tv_close_start, tv_close_end;
+    float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+                d2h_time = 0, close_time = 0, total_time = 0;
+  
+    gettimeofday(&tv_total_start, NULL);
+#endif
+
 	// common variables
 	cl_int error;
 
@@ -90,7 +109,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 		fatal_CL(error, __LINE__);
 
 	// Select the 1st platform
-	cl_platform_id platform = platforms[0];
+	cl_platform_id platform = platforms[platform_id_inuse];
 
 	// Get the name of the selected platform and print it (if there are multiple platforms, choose the first one)
 	char pbuf[100];
@@ -148,7 +167,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 
 	// Select the first device (previousely selected for the context) (if there are multiple devices, choose the first one)
 	cl_device_id device;
-	device = devices[0];
+	device = devices[device_id_inuse];
 
 	// Get the name of the selected device (previousely selected for the context) and print it
 	error = clGetDeviceInfo(device, 
@@ -166,11 +185,12 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 
 	// Create a command queue
 	cl_command_queue command_queue;
-	command_queue = clCreateCommandQueue(	context, 
-											device, 
-											0, 
-											&error);
-	if (error != CL_SUCCESS) 
+#ifdef TIMING
+	command_queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &error);
+#else
+	command_queue = clCreateCommandQueue(context, device, 0, &error);
+#endif
+	if (error != CL_SUCCESS)
 		fatal_CL(error, __LINE__);
 
 	//====================================================================================================100
@@ -277,6 +297,12 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 										&error);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+
+#ifdef  TIMING
+    gettimeofday(&tv_init_end, NULL);
+    tvsub(&tv_init_end, &tv_total_start, &tv);
+    init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	//====================================================================================================100
 	//	TRIGGERING INITIAL DRIVER OVERHEAD
@@ -430,6 +456,12 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
+#ifdef  TIMING
+  gettimeofday(&tv_mem_alloc_end, NULL);
+  tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+  mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	//====================================================================================================100
 	// End
 	//====================================================================================================100
@@ -442,6 +474,7 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	// Image
 	//====================================================================================================100
 
+    cl_event event;
 	error = clEnqueueWriteBuffer(	command_queue, 
 									d_I, 
 									1, 
@@ -450,9 +483,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									image, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//====================================================================================================100
 	// coordinates
@@ -466,9 +503,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									iN, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	error = clEnqueueWriteBuffer(	command_queue, 
 									d_iS, 
@@ -478,9 +519,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									iS, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	error = clEnqueueWriteBuffer(	command_queue, 
 									d_jE, 
@@ -490,9 +535,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									jE, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	error = clEnqueueWriteBuffer(	command_queue, 
 									d_jW, 
@@ -502,9 +551,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									jW, 
 									0, 
 									0, 
-									0);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    h2d_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//====================================================================================================100
 	// End
@@ -563,9 +616,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									local_work_size, 
 									0, 
 									NULL, 
-									NULL);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    kernel_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//====================================================================================================100
 	//	Synchronization - wait for all operations in the command queue so far to finish
@@ -855,9 +912,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 										local_work_size, 
 										0, 
 										NULL, 
-										NULL);
+										&event);
 		if (error != CL_SUCCESS) 
 			fatal_CL(error, __LINE__);
+#ifdef TIMING
+        kernel_time += probe_event_time(event, command_queue);
+#endif
+        clReleaseEvent(event);
 
 		// synchronize
 		// error = clFinish(command_queue);
@@ -907,9 +968,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 											local_work_size, 
 											0, 
 											NULL, 
-											NULL);
+											&event);
 			if (error != CL_SUCCESS) 
 				fatal_CL(error, __LINE__);
+#ifdef TIMING
+            kernel_time += probe_event_time(event, command_queue);
+#endif
+            clReleaseEvent(event);
 
 			// synchronize
 			// error = clFinish(command_queue);
@@ -954,9 +1019,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									&total2,
 									0,
 									NULL,
-									NULL);
+									&event);
 		if (error != CL_SUCCESS) 
 			fatal_CL(error, __LINE__);
+#ifdef TIMING
+        d2h_time += probe_event_time(event, command_queue);
+#endif
+        clReleaseEvent(event);
 
 		//====================================================================================================100
 		// calculate statistics
@@ -988,9 +1057,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 										local_work_size, 
 										0, 
 										NULL, 
-										NULL);
+										&event);
 		if (error != CL_SUCCESS) 
 			fatal_CL(error, __LINE__);
+#ifdef TIMING
+        kernel_time += probe_event_time(event, command_queue);
+#endif
+        clReleaseEvent(event);
 
 		// synchronize
 		// error = clFinish(command_queue);
@@ -1010,9 +1083,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 										local_work_size, 
 										0, 
 										NULL, 
-										NULL);
+										&event);
 		if (error != CL_SUCCESS) 
 			fatal_CL(error, __LINE__);
+#ifdef TIMING
+        kernel_time += probe_event_time(event, command_queue);
+#endif
+        clReleaseEvent(event);
 
 		// synchronize
 		// error = clFinish(command_queue);
@@ -1060,9 +1137,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 									local_work_size, 
 									0, 
 									NULL, 
-									NULL);
+									&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    kernel_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	//====================================================================================================100
 	// synchronize
@@ -1088,9 +1169,13 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 								image,
 								0,
 								NULL,
-								NULL);
+								&event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event, command_queue);
+#endif
+    clReleaseEvent(event);
 
 	// int i;
 	// for(i=0; i<100; i++){
@@ -1100,6 +1185,10 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	//======================================================================================================================================================150
 	// 	FREE MEMORY
 	//======================================================================================================================================================150
+
+#ifdef  TIMING
+    gettimeofday(&tv_close_start, NULL);
+#endif
 
 	// OpenCL structures
 	error = clReleaseKernel(extract_kernel);
@@ -1180,6 +1269,22 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	// 	End
 	//======================================================================================================================================================150
 
+#ifdef  TIMING
+	printf("Time spent in different stages of the application:\n");
+    gettimeofday(&tv_close_end, NULL);
+    tvsub(&tv_close_end, &tv_close_start, &tv);
+    close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+    tvsub(&tv_close_end, &tv_total_start, &tv);
+    total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+  
+    printf("Init: %f\n", init_time);
+    printf("MemAlloc: %f\n", mem_alloc_time);
+    printf("HtoD: %f\n", h2d_time);
+    printf("Exec: %f\n", kernel_time);
+    printf("DtoH: %f\n", d2h_time);
+    printf("Close: %f\n", close_time);
+    printf("Total: %f\n", total_time);
+#endif
 }
 
 //========================================================================================================================================================================================================200
