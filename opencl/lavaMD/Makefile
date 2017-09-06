@@ -1,5 +1,17 @@
 include ../../common/make.config
 
+#Can be changed by `make TYPE=CPU`
+TYPE = GPU
+
+#Library
+ifeq ($(TYPE),GPU)
+	OPENCL_INC = $(NV_OPENCL_INC)
+	OPENCL_LIB = $(NV_OPENCL_LIB)
+else
+	OPENCL_INC = $(INTEL_OPENCL_INC)
+	OPENCL_LIB = $(INTEL_OPENCL_LIB)
+endif
+
 # Example
 # target: dependencies
 	# command 1
@@ -30,9 +42,10 @@ a.out:		main.o \
 			./util/num/num.o \
 			./util/timer/timer.o \
 			./util/opencl/opencl.o \
+			../util/timing.c \
 			-lm \
 			$(OCL_LIB) \
-			-o lavaMD
+			-o lavaMD.out
 
 # compile function files into objects
 main.o:		main.h \
@@ -82,7 +95,7 @@ main.o:		main.h \
 
 # delete all object and executable files
 clean:
-	rm	*.o lavaMD \
+	rm	*.o lavaMD.out \
 		./kernel/*.o \
 		./util/num/*.o \
 		./util/timer/*.o \
