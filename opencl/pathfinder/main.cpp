@@ -24,30 +24,66 @@ using namespace std;
 #define STR_SIZE 256
 #define DEVICE   0
 #define M_SEED   9
-#define BENCH_PRINT
+// #define BENCH_PRINT
 #define IN_RANGE(x, min, max)	((x)>=(min) && (x)<=(max))
 #define CLAMP_RANGE(x, min, max) x = (x<(min)) ? min : ((x>(max)) ? max : x )
 #define MIN(a, b) ((a)<=(b) ? (a) : (b))
 
 // Program variables.
-int   rows, cols;
+int   rows = -1, cols = -1;
 int   Ne = rows * cols;
 int*  data;
 int** wall;
 int*  result;
-int   pyramid_height;
+int   pyramid_height = -1;
+int   verbose = 0;
+
+// OCL config
+int platform_id_inuse = 0;            // platform id in use (default: 0)
+int device_id_inuse = 0;              //device id in use (default : 0)
 
 void init(int argc, char** argv)
 {
-	if (argc == 4)
+    int cur_arg;
+	for (cur_arg = 1; cur_arg<argc; cur_arg++) {
+        if (strcmp(argv[cur_arg], "-c") == 0) {
+            if (argc >= cur_arg + 1) {
+                cols = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-r") == 0) {
+            if (argc >= cur_arg + 1) {
+                rows = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-h") == 0) {
+            if (argc >= cur_arg + 1) {
+                pyramid_height = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        if (strcmp(argv[cur_arg], "-v") == 0) {
+			verbose = 1;
+        }
+        else if (strcmp(argv[cur_arg], "-p") == 0) {
+            if (argc >= cur_arg + 1) {
+                platform_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-d") == 0) {
+            if (argc >= cur_arg + 1) {
+                device_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+    }
+
+	if (cols < 0 || rows < 0 || pyramid_height < 0)
 	{
-		cols = atoi(argv[1]);
-		rows = atoi(argv[2]);
-		pyramid_height = atoi(argv[3]);
-	}
-	else
-	{
-		printf("Usage: dynproc row_len col_len pyramid_height\n");
+        fprintf(stderr, "usage: %s <-r rows> <-c cols> <-h pyramid_height> [-v] [-p platform_id] [-d device_id] [-t device_type]\n", argv[0]);
 		exit(0);
 	}
 	data = new int[rows * cols];
@@ -102,8 +138,8 @@ int main(int argc, char** argv)
 	int size = rows * cols;
 
 	// Create and initialize the OpenCL object.
-	OpenCL cl(1);  // 1 means to display output (debugging mode).
-	cl.init(1);    // 1 means to use GPU. 0 means use CPU.
+	OpenCL cl(verbose);  // 1 means to display output (debugging mode).
+	cl.init();    // 1 means to use GPU. 0 means use CPU.
 	cl.gwSize(rows * cols);
 
 	// Create and build the kernel.

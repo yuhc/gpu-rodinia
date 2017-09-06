@@ -1,3 +1,6 @@
+#ifndef __OPENCL_H__
+#define __OPENCL_H__
+
 #include <iostream>
 #include <stdio.h>
 #include <map>
@@ -24,7 +27,7 @@ class OpenCL
 public:
 	OpenCL(int displayOutput);
 	~OpenCL();
-	void init(int isGPU);
+	void init();
 	void createKernel(string kernelName);
 	cl_kernel kernel(string kernelName);
 	void gwSize(size_t theSize);
@@ -45,6 +48,11 @@ private:
 	cl_command_queue        command_queue;
 	cl_program              program;
 	
-	void getDevices(cl_device_type deviceType);
+	void getDevices();
 	void buildKernel();
 };
+
+extern int platform_id_inuse;
+extern int device_id_inuse;
+
+#endif

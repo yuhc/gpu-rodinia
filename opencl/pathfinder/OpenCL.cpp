@@ -76,7 +76,7 @@ void OpenCL::createKernel(string kernelName)
 	kernelArray[kernelName] = kernel;
 	
 	// Get the kernel work group size.
-	clGetKernelWorkGroupInfo(kernelArray[kernelName], device_id[0], CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &lwsize, NULL);
+	clGetKernelWorkGroupInfo(kernelArray[kernelName], device_id[device_id_inuse], CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &lwsize, NULL);
 	if (lwsize == 0)
 	{
 		cout << "Error: clGetKernelWorkGroupInfo() returned a max work group size of zero!" << endl;
@@ -155,10 +155,10 @@ void OpenCL::buildKernel()
 		char*  build_log;
 		size_t log_size;
 		// First call to know the proper size
-		clGetProgramBuildInfo(program, device_id[0], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+		clGetProgramBuildInfo(program, device_id[device_id_inuse], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
 		build_log = new char[log_size + 1];
 		// Second call to get the log
-		clGetProgramBuildInfo(program, device_id[0], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
+		clGetProgramBuildInfo(program, device_id[device_id_inuse], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
 		build_log[log_size] = '\0';
 		cout << build_log << endl;
 		delete[] build_log;
@@ -167,7 +167,6 @@ void OpenCL::buildKernel()
 		cout << "*************************************************\n\n" << endl;
 		exit(1);
 	}
-
 
 	/* Show error info from building the program. */
 	if (VERBOSE)
@@ -179,10 +178,10 @@ void OpenCL::buildKernel()
 		char*  build_log;
 		size_t log_size;
 		// First call to know the proper size
-		clGetProgramBuildInfo(program, device_id[0], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+		clGetProgramBuildInfo(program, device_id[device_id_inuse], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
 		build_log = new char[log_size + 1];
 		// Second call to get the log
-		clGetProgramBuildInfo(program, device_id[0], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
+		clGetProgramBuildInfo(program, device_id[device_id_inuse], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
 		build_log[log_size] = '\0';
 		cout << build_log << endl;
 		delete[] build_log;
@@ -192,7 +191,7 @@ void OpenCL::buildKernel()
 	}
 }
 
-void OpenCL::getDevices(cl_device_type deviceType)
+void OpenCL::getDevices()
 {
 	cl_uint         platforms_n = 0;
 	cl_uint         devices_n   = 0;
@@ -224,7 +223,7 @@ void OpenCL::getDevices(cl_device_type deviceType)
 		}
 	}
 	
-	clGetDeviceIDs(platform_id[0], deviceType, 100, device_id, &devices_n);
+	clGetDeviceIDs(platform_id[platform_id_inuse], CL_DEVICE_TYPE_ALL, 100, device_id, &devices_n);
 	if (VERBOSE)
 	{
 		printf("Using the default platform (platform 0)...\n\n");
@@ -264,17 +263,29 @@ void OpenCL::getDevices(cl_device_type deviceType)
 		}
 		printf("\n");
 	}
-	
+
+    // Get device type
+    /*
+    cl_device_type device_type;
+    ret = clGetDeviceInfo(device_id[device_id_inuse], CL_DEVICE_TYPE,
+            sizeof(device_type), (void *)&device_type, NULL);
+    if (ret != CL_SUCCESS)
+    {
+        printf("ERROR: clGetDeviceIDs failed\n");
+        exit(1);
+    };
+    */
+
 	// Create an OpenCL context.
-	context = clCreateContext(NULL, devices_n, device_id, NULL, NULL, &ret);
+	context = clCreateContext(NULL, 1, &device_id[device_id_inuse], NULL, NULL, &ret);
 	if (ret != CL_SUCCESS)
 	{
 		printf("\nError at clCreateContext! Error code %i\n\n", ret);
 		exit(1);
 	}
- 
+
 	// Create a command queue.
-	command_queue = clCreateCommandQueue(context, device_id[0], 0, &ret);
+	command_queue = clCreateCommandQueue(context, device_id[device_id_inuse], 0, &ret);
 	if (ret != CL_SUCCESS)
 	{
 		printf("\nError at clCreateCommandQueue! Error code %i\n\n", ret);
@@ -282,12 +293,9 @@ void OpenCL::getDevices(cl_device_type deviceType)
 	}
 }
 
-void OpenCL::init(int isGPU)
+void OpenCL::init()
 {
-	if (isGPU)
-		getDevices(CL_DEVICE_TYPE_GPU);
-	else
-		getDevices(CL_DEVICE_TYPE_CPU);
+	getDevices();
 
 	buildKernel();
 }
