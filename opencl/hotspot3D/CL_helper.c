@@ -1,4 +1,5 @@
 #include "CL_helper.h"
+#include <sys/time.h>
 
 #define STR_SIZE 256
 

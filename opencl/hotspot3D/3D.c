@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <CL/cl.h>
 #include "CL_helper.h"
+#include "timing.h"
 
 #ifndef DEVICE
 #define DEVICE CL_DEVICE_TYPE_DEFAULT
@@ -29,7 +30,7 @@ float amb_temp    = 80.0;
 
 void usage(int argc, char **argv)
 {
-  fprintf(stderr, "Usage: %s <rows/cols> <layers> <iterations> <powerFile> <tempFile> <outputFile>\n", argv[0]);
+  fprintf(stderr, "Usage: %s <-n rows/cols> <-l layers> <-i iterations> <-f powerFile tempFile outputFile> [-p platform] [-d device]\n", argv[0]);
   fprintf(stderr, "\t<rows/cols>  - number of rows/cols in the grid (positive integer)\n");
   fprintf(stderr, "\t<layers>  - number of layers in the grid (positive integer)\n");
 
@@ -41,23 +42,65 @@ void usage(int argc, char **argv)
 }
 
 
-
 int main(int argc, char** argv)
 {
-  if (argc != 7)
-    {
-      usage(argc,argv);
+    char *pfile = NULL, *tfile = NULL, *ofile = NULL;
+    int iterations = 0;
+    int numCols    = 0;
+    int numRows    = 0;
+    int layers     = 0;
+
+    int platform_id_inuse = 0;            // platform id in use (default: 0)
+    int device_id_inuse = 0;              // device id in use (default : 0)
+
+    int cur_arg;
+	for (cur_arg = 1; cur_arg<argc; cur_arg++) {
+        if (strcmp(argv[cur_arg], "-h") == 0) {
+			usage(argc, argv);
+        }
+        else if (strcmp(argv[cur_arg], "-n") == 0) {
+            if (argc >= cur_arg + 1) {
+                numCols = numRows = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-l") == 0) {
+            if (argc >= cur_arg + 1) {
+                layers = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-i") == 0) {
+            if (argc >= cur_arg + 1) {
+                iterations = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-f") == 0) {
+            if (argc >= cur_arg + 3) {
+                pfile = argv[cur_arg+1];
+                tfile = argv[cur_arg+2];
+                ofile = argv[cur_arg+3];
+                cur_arg += 3;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-p") == 0) {
+            if (argc >= cur_arg + 1) {
+                platform_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
+        else if (strcmp(argv[cur_arg], "-d") == 0) {
+            if (argc >= cur_arg + 1) {
+                device_id_inuse = atoi(argv[cur_arg+1]);
+                cur_arg++;
+            }
+        }
     }
 
-  char *pfile, *tfile, *ofile;
-  int iterations = atoi(argv[3]);
-
-  pfile            = argv[4];
-  tfile            = argv[5];
-  ofile            = argv[6];
-  int numCols      = atoi(argv[1]);
-  int numRows      = atoi(argv[1]);
-  int layers       = atoi(argv[2]);
+	if (numCols == 0 || layers == 0 || iterations == 0 || pfile == NULL) {
+		usage(argc, argv);
+	}
 
   /* calculating parameters*/
 
@@ -109,6 +152,21 @@ int main(int argc, char** argv)
   const char *KernelSource = load_kernel_source("hotspotKernel.cl"); 
   cl_uint numPlatforms;
 
+#ifdef TIMING
+  struct timeval tv;
+  struct timeval tv_total_start, tv_total_end;
+  struct timeval tv_init_end;
+  struct timeval tv_h2d_start, tv_h2d_end;
+  struct timeval tv_d2h_start, tv_d2h_end;
+  struct timeval tv_kernel_start, tv_kernel_end;
+  struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+  struct timeval tv_close_start, tv_close_end;
+  float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+              d2h_time = 0, close_time = 0, total_time = 0;
+
+  gettimeofday(&tv_total_start, NULL);
+#endif
+
   err = clGetPlatformIDs(0, NULL, &numPlatforms);
   if (err != CL_SUCCESS || numPlatforms <= 0)
     {
@@ -124,21 +182,32 @@ int main(int argc, char** argv)
       return EXIT_FAILURE;
     }
 
-  for (i = 0; i < numPlatforms; i++)
-    {
-      err = clGetDeviceIDs(Platform[i], DEVICE, 1, &device_id, NULL);
-      if (err == CL_SUCCESS)
-        {
-          break;
-        } 
+    // get device
+    cl_uint num_devices;
+    err = clGetDeviceIDs(Platform[platform_id_inuse], CL_DEVICE_TYPE_ALL, 0,
+            NULL, &num_devices);
+    if (err != CL_SUCCESS) {
+        printf("ERROR: clGetDeviceIDs failed\n");
+        return EXIT_FAILURE;
+    };
+	printf("num_devices = %d\n", num_devices);
+    if (device_id_inuse > num_devices) {
+        printf("Invalid Device Number\n");
+        return EXIT_FAILURE;
     }
-
-  if (device_id == NULL)
-    {
-      printf("Error: Failed to create a device group!\n%s\n",err_code(err));
-      return EXIT_FAILURE;
+	cl_device_id *device_list = (cl_device_id *)malloc(sizeof(cl_device_id)*num_devices);
+	if ( !device_list ) {
+        printf("ERROR: new cl_device_id[] failed\n");
+        return EXIT_FAILURE;
     }
-
+    err = clGetDeviceIDs(Platform[platform_id_inuse], CL_DEVICE_TYPE_ALL, num_devices,
+            device_list, NULL);
+    if (err != CL_SUCCESS) {
+        printf("ERROR: clGetDeviceIDs failed\n");
+        return EXIT_FAILURE;
+    };
+    device_id = device_list[device_id_inuse];
+    free(device_list);
   err = output_device_info(device_id);
 
   context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
@@ -148,7 +217,11 @@ int main(int argc, char** argv)
       return EXIT_FAILURE;
     }
 
+#ifdef TIMING
+  commands = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &err);
+#else
   commands = clCreateCommandQueue(context, device_id, 0, &err);
+#endif
   if (!commands)
     {
       printf("Error: Failed to create a command commands!\n%s\n", err_code(err));
@@ -180,10 +253,20 @@ int main(int argc, char** argv)
       printf("Error: Failed to create compute kernel!\n%s\n", err_code(err));
       return EXIT_FAILURE;
     }
+#ifdef  TIMING
+  gettimeofday(&tv_init_end, NULL);
+  tvsub(&tv_init_end, &tv_total_start, &tv);
+  init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
   d_a  = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) * count, NULL, NULL);
   d_b  = clCreateBuffer(context, CL_MEM_READ_ONLY , sizeof(float) * count, NULL, NULL);
   d_c  = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) * count, NULL, NULL);
+#ifdef  TIMING
+  gettimeofday(&tv_mem_alloc_end, NULL);
+  tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+  mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
   if (!d_a || !d_b || !d_c) 
     {
@@ -191,27 +274,40 @@ int main(int argc, char** argv)
       exit(1);
     }    
 
-  err = clEnqueueWriteBuffer(commands, d_a, CL_TRUE, 0, sizeof(float) * count, tIn, 0, NULL, NULL);
+  cl_event event;
+  err = clEnqueueWriteBuffer(commands, d_a, CL_TRUE, 0, sizeof(float) * count, tIn, 0, NULL, &event);
   if (err != CL_SUCCESS)
     {
       printf("Error: Failed to write tIn to source array!\n%s\n", err_code(err));
       exit(1);
     }
+#ifdef TIMING
+  h2d_time += probe_event_time(event, commands);
+#endif
+  clReleaseEvent(event);
 
-  err = clEnqueueWriteBuffer(commands, d_b, CL_TRUE, 0, sizeof(float) * count, pIn, 0, NULL, NULL);
+  err = clEnqueueWriteBuffer(commands, d_b, CL_TRUE, 0, sizeof(float) * count, pIn, 0, NULL, &event);
   if (err != CL_SUCCESS)
     {
       printf("Error: Failed to write pIn to source array!\n%s\n", err_code(err));
       exit(1);
     }
+#ifdef TIMING
+    h2d_time += probe_event_time(event, commands);
+#endif
+    clReleaseEvent(event);
 
-  err = clEnqueueWriteBuffer(commands, d_c, CL_TRUE, 0, sizeof(float) * count, tempOut, 0, NULL, NULL);
+  err = clEnqueueWriteBuffer(commands, d_c, CL_TRUE, 0, sizeof(float) * count, tempOut, 0, NULL, &event);
   if (err != CL_SUCCESS)
     {
       printf("Error: Failed to write tempOut to source array!\n%s\n", err_code(err));
       exit(1);
     }
-  long long start = get_time();
+#ifdef TIMING
+    h2d_time += probe_event_time(event, commands);
+#endif
+    clReleaseEvent(event);
+
   int j;
   for(j = 0; j < iterations; j++)
     {
@@ -241,7 +337,7 @@ int main(int argc, char** argv)
       local[0] = WG_SIZE_X;
       local[1] = WG_SIZE_Y;
 
-      err = clEnqueueNDRangeKernel(commands, ko_vadd, 2, NULL, global, local, 0, NULL, NULL);
+      err = clEnqueueNDRangeKernel(commands, ko_vadd, 2, NULL, global, local, 0, NULL, &event);
       if (err)
         {
           printf("Error: Failed to execute kernel!\n%s\n", err_code(err));
@@ -251,26 +347,28 @@ int main(int argc, char** argv)
       cl_mem temp = d_a;
       d_a         = d_c;
       d_c         = temp;
+
+#ifdef TIMING
+      kernel_time += probe_event_time(event, commands);
+#endif
+      clReleaseEvent(event);
     }
 
   clFinish(commands);
-  long long stop = get_time();
-  err = clEnqueueReadBuffer( commands, d_c, CL_TRUE, 0, sizeof(float) * count, tempOut, 0, NULL, NULL );  
+  err = clEnqueueReadBuffer( commands, d_c, CL_TRUE, 0, sizeof(float) * count, tempOut, 0, NULL, &event);  
   if (err != CL_SUCCESS)
     {
       printf("Error: Failed to read output array!\n%s\n", err_code(err));
       exit(1);
     }
+#ifdef TIMING
+  d2h_time += probe_event_time(event, commands);
+#endif
+  clReleaseEvent(event);
 
-  float* answer = (float*)calloc(size, sizeof(float));
-  computeTempCPU(pIn, tempCopy, answer, numCols, numRows, layers, Cap, Rx, Ry, Rz, dt, amb_temp, iterations);
-
-  float acc = accuracy(tempOut,answer,numRows*numCols*layers);
-  float time = (float)((stop - start)/(1000.0 * 1000.0));
-  printf("Time: %.3f (s)\n",time);
-  printf("Accuracy: %e\n",acc);
-
-  writeoutput(tempOut,numRows,numCols,layers,ofile);
+#ifdef  TIMING
+  gettimeofday(&tv_close_start, NULL);
+#endif
   clReleaseMemObject(d_a);
   clReleaseMemObject(d_b);
   clReleaseMemObject(d_c);
@@ -278,6 +376,28 @@ int main(int argc, char** argv)
   clReleaseKernel(ko_vadd);
   clReleaseCommandQueue(commands);
   clReleaseContext(context);
+#ifdef  TIMING
+  gettimeofday(&tv_close_end, NULL);
+  tvsub(&tv_close_end, &tv_close_start, &tv);
+  close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+  tvsub(&tv_close_end, &tv_total_start, &tv);
+  total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+  printf("Init: %f\n", init_time);
+  printf("MemAlloc: %f\n", mem_alloc_time);
+  printf("HtoD: %f\n", h2d_time);
+  printf("Exec: %f\n", kernel_time);
+  printf("DtoH: %f\n", d2h_time);
+  printf("Close: %f\n", close_time);
+  printf("Total: %f\n", total_time);
+#endif
+
+  float* answer = (float*)calloc(size, sizeof(float));
+  computeTempCPU(pIn, tempCopy, answer, numCols, numRows, layers, Cap, Rx, Ry, Rz, dt, amb_temp, iterations);
+  float acc = accuracy(tempOut,answer,numRows*numCols*layers);
+  printf("Accuracy: %e\n",acc);
+
+  writeoutput(tempOut,numRows,numCols,layers,ofile);
 
   return 0;
 }
