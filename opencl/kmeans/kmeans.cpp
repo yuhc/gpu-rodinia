@@ -49,6 +49,22 @@
      #define BLOCK_SIZE2 256
 #endif
 
+//Primitives for timing
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_start, tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
 int platform_id_inuse = 0;            // platform id in use (default: 0)
 int device_id_inuse = 0;              // device id in use (default : 0)
 
@@ -102,10 +118,18 @@ static int initialize()
 
 static int shutdown()
 {
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
 	// release resources
 	if( cmd_queue ) clReleaseCommandQueue( cmd_queue );
 	if( context ) clReleaseContext( context );
 	if( device_list ) delete device_list;
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	// reset all variables
 	cmd_queue = 0;
@@ -145,7 +169,10 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature)
 	if(!fp) { printf("ERROR: unable to open '%s'\n", tempchar); return -1; }
 	fread(source + strlen(source), sourcesize, 1, fp);
 	fclose(fp);
-		
+
+#ifdef  TIMING
+    gettimeofday(&tv_init_start, NULL);
+#endif
 	// OpenCL initialization
 	if(initialize()) return -1;
 
@@ -173,6 +200,11 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature)
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateKernel() 0 => %d\n", err); return -1; }
 		
 	clReleaseProgram(prog);	
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_init_start, &tv);
+	init_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 	
 	d_feature = clCreateBuffer(context, CL_MEM_READ_WRITE, n_points * n_features * sizeof(float), NULL, &err );
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer d_feature (size:%d) => %d\n", n_points * n_features, err); return -1;}
@@ -182,11 +214,21 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature)
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer d_cluster (size:%d) => %d\n", n_clusters * n_features, err); return -1;}
 	d_membership = clCreateBuffer(context, CL_MEM_READ_WRITE, n_points * sizeof(int), NULL, &err );
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer d_membership (size:%d) => %d\n", n_points, err); return -1;}
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 		
+	cl_event event;
 	//write buffers
-	err = clEnqueueWriteBuffer(cmd_queue, d_feature, 1, 0, n_points * n_features * sizeof(float), feature[0], 0, 0, 0);
+	err = clEnqueueWriteBuffer(cmd_queue, d_feature, 1, 0, n_points * n_features * sizeof(float), feature[0], 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer d_feature (size:%d) => %d\n", n_points * n_features, err); return -1; }
-	
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
+
 	clSetKernelArg(kernel2, 0, sizeof(void *), (void*) &d_feature);
 	clSetKernelArg(kernel2, 1, sizeof(void *), (void*) &d_feature_swap);
 	clSetKernelArg(kernel2, 2, sizeof(cl_int), (void*) &n_points);
@@ -198,29 +240,57 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature)
 	if(global_work[0]%local_work_size !=0)
 	  global_work[0]=(global_work[0]/local_work_size+1)*local_work_size;
 
-	err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 1, NULL, global_work, &local_work_size, 0, 0, 0);
+	err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 1, NULL, global_work, &local_work_size, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
-	
+#ifdef TIMING
+    kernel_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
+
 	membership_OCL = (int*) malloc(n_points * sizeof(int));
 }
 
 void deallocateMemory()
 {
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
 	clReleaseMemObject(d_feature);
 	clReleaseMemObject(d_feature_swap);
 	clReleaseMemObject(d_cluster);
 	clReleaseMemObject(d_membership);
 	free(membership_OCL);
-
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
 
 
 int main( int argc, char** argv) 
 {
 	printf("WG size of kernel_swap = %d, WG size of kernel_kmeans = %d \n", BLOCK_SIZE, BLOCK_SIZE2);
+#ifdef  TIMING
+	gettimeofday(&tv_total_start, NULL);
+#endif
 
 	setup(argc, argv);
 	shutdown();
+
+#ifdef  TIMING
+	gettimeofday(&tv_total_end, NULL);
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
 }
 
 int	kmeansOCL(float **feature,    /* in: [npoints][nfeatures] */
@@ -236,6 +306,7 @@ int	kmeansOCL(float **feature,    /* in: [npoints][nfeatures] */
 	int delta = 0;
 	int i, j, k;
 	cl_int err = 0;
+	cl_event event;
 	
 	size_t global_work[3] = { n_points, 1, 1 }; 
 
@@ -244,8 +315,12 @@ int	kmeansOCL(float **feature,    /* in: [npoints][nfeatures] */
 	if(global_work[0]%local_work_size !=0)
 	  global_work[0]=(global_work[0]/local_work_size+1)*local_work_size;
 	
-	err = clEnqueueWriteBuffer(cmd_queue, d_cluster, 1, 0, n_clusters * n_features * sizeof(float), clusters[0], 0, 0, 0);
+	err = clEnqueueWriteBuffer(cmd_queue, d_cluster, 1, 0, n_clusters * n_features * sizeof(float), clusters[0], 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer d_cluster (size:%d) => %d\n", n_points, err); return -1; }
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
 
 	int size = 0; int offset = 0;
 					
@@ -258,11 +333,20 @@ int	kmeansOCL(float **feature,    /* in: [npoints][nfeatures] */
 	clSetKernelArg(kernel_s, 6, sizeof(cl_int), (void*) &offset);
 	clSetKernelArg(kernel_s, 7, sizeof(cl_int), (void*) &size);
 
-	err = clEnqueueNDRangeKernel(cmd_queue, kernel_s, 1, NULL, global_work, &local_work_size, 0, 0, 0);
+	err = clEnqueueNDRangeKernel(cmd_queue, kernel_s, 1, NULL, global_work, &local_work_size, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
+#ifdef TIMING
+    h2d_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
+
 	clFinish(cmd_queue);
-	err = clEnqueueReadBuffer(cmd_queue, d_membership, 1, 0, n_points * sizeof(int), membership_OCL, 0, 0, 0);
+	err = clEnqueueReadBuffer(cmd_queue, d_membership, 1, 0, n_points * sizeof(int), membership_OCL, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: Memcopy Out\n"); return -1; }
+#ifdef TIMING
+    d2h_time += probe_event_time(event,cmd_queue);
+#endif
+    clReleaseEvent(event);
 	
 	delta = 0;
 	for (i = 0; i < n_points; i++)
