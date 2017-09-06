@@ -49,40 +49,52 @@
      #define BLOCK_SIZE2 256
 #endif
 
-
+int platform_id_inuse = 0;            // platform id in use (default: 0)
+int device_id_inuse = 0;              // device id in use (default : 0)
 
 // local variables
 static cl_context	    context;
 static cl_command_queue cmd_queue;
 static cl_device_type   device_type;
 static cl_device_id   * device_list;
-static cl_int           num_devices;
+static cl_uint          num_devices;
 
-static int initialize(int use_gpu)
+static int initialize()
 {
 	cl_int result;
 	size_t size;
+	cl_uint num_platforms;
 
 	// create OpenCL context
-	cl_platform_id platform_id;
-	if (clGetPlatformIDs(1, &platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(1,*,0) failed\n"); return -1; }
-	cl_context_properties ctxprop[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0};
-	device_type = use_gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU;
-	context = clCreateContextFromType( ctxprop, device_type, NULL, NULL, NULL );
-	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", use_gpu ? "GPU" : "CPU"); return -1; }
+    if (clGetPlatformIDs(0, NULL, &num_platforms) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(0,0,*) failed\n"); return -1; }
+	cl_platform_id all_platform_id[num_platforms];
+	if (clGetPlatformIDs(num_platforms, all_platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(*,*,0) failed\n"); return -1; }
+    cl_platform_id platform_id = all_platform_id[platform_id_inuse];
 
-	// get the list of GPUs
-	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, 0, NULL, &size );
-	num_devices = (int) (size / sizeof(cl_device_id));
-	
-	if( result != CL_SUCCESS || num_devices < 1 ) { printf("ERROR: clGetContextInfo() failed\n"); return -1; }
+    // get device
+    if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, 0, NULL, &num_devices) != CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
+	printf("num_devices = %d\n", num_devices);
+    if (device_id_inuse > num_devices) {
+        printf("Invalid Device Number\n");
+        return -1;
+    }
 	device_list = new cl_device_id[num_devices];
 	if( !device_list ) { printf("ERROR: new cl_device_id[] failed\n"); return -1; }
-	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, size, device_list, NULL );
-	if( result != CL_SUCCESS ) { printf("ERROR: clGetContextInfo() failed\n"); return -1; }
+    if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, num_devices, device_list, NULL) != CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
+
+    // get device type
+    if (clGetDeviceInfo(device_list[device_id_inuse], CL_DEVICE_TYPE, sizeof(device_type), (void *)&device_type, NULL)!= CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
+
+	cl_context_properties ctxprop[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0};
+	context = clCreateContextFromType( ctxprop, device_type, NULL, NULL, NULL );
+	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU"); return -1; }
 
 	// create command queue for the first device
-	cmd_queue = clCreateCommandQueue( context, device_list[0], 0, NULL );
+#ifdef TIMING
+	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, NULL );
+#else
+	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], 0, NULL );
+#endif
 	if( !cmd_queue ) { printf("ERROR: clCreateCommandQueue() failed\n"); return -1; }
 
 	return 0;
@@ -128,15 +140,14 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature)
 	if(!source) { printf("ERROR: calloc(%d) failed\n", sourcesize); return -1; }
 
 	// read the kernel core source
-	char * tempchar = "./kmeans.cl";
+	const char * tempchar = "./kmeans.cl";
 	FILE * fp = fopen(tempchar, "rb"); 
 	if(!fp) { printf("ERROR: unable to open '%s'\n", tempchar); return -1; }
 	fread(source + strlen(source), sourcesize, 1, fp);
 	fclose(fp);
 		
 	// OpenCL initialization
-	int use_gpu = 1;
-	if(initialize(use_gpu)) return -1;
+	if(initialize()) return -1;
 
 	// compile kernel
 	cl_int err = 0;
@@ -153,8 +164,8 @@ int allocate(int n_points, int n_features, int n_clusters, float **feature)
 	}
 	if(err != CL_SUCCESS) { printf("ERROR: clBuildProgram() => %d\n", err); return -1; }
 	
-	char * kernel_kmeans_c  = "kmeans_kernel_c";
-	char * kernel_swap  = "kmeans_swap";	
+	const char * kernel_kmeans_c  = "kmeans_kernel_c";
+	const char * kernel_swap  = "kmeans_swap";	
 		
 	kernel_s = clCreateKernel(prog, kernel_kmeans_c, &err);  
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateKernel() 0 => %d\n", err); return -1; }

@@ -1,1 +1,1 @@
-./kmeans.out -o -i ../../data/kmeans/819200.txt
+./kmeans.out -o -i ../../data/kmeans/819200.txt -p 0 -d 0

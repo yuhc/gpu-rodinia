@@ -81,7 +81,8 @@
 #include <unistd.h>
 
 extern double wtime(void);
-
+extern int platform_id_inuse;     // platform id in use (default: 0)
+extern int device_id_inuse;       //device id in use (default : 0)
 
 
 /*---< usage() >------------------------------------------------------------*/
@@ -129,7 +130,7 @@ int setup(int argc, char **argv) {
 		//float	cluster_timing, io_timing;		
 
 		/* obtain command line arguments and change appropriate options */
-		while ( (opt=getopt(argc,argv,"i:t:m:n:l:bro"))!= EOF) {
+		while ( (opt=getopt(argc,argv,"i:t:m:n:l:p:d:bro"))!= EOF) {
         switch (opt) {
             case 'i': filename=optarg;
                       break;
@@ -147,6 +148,10 @@ int setup(int argc, char **argv) {
 					  break;
 		    case 'l': nloops = atoi(optarg);
 					  break;
+		    case 'p': platform_id_inuse = atoi(optarg);
+                      break;
+		    case 'd': device_id_inuse = atoi(optarg);
+                      break;
             case '?': usage(argv[0]);
                       break;
             default: usage(argv[0]);
