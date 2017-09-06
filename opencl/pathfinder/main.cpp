@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <iostream>
 #include "OpenCL.h"
+#include "timing.h"
 
 using namespace std;
 
@@ -41,6 +42,19 @@ int   verbose = 0;
 // OCL config
 int platform_id_inuse = 0;            // platform id in use (default: 0)
 int device_id_inuse = 0;              //device id in use (default : 0)
+
+#ifdef TIMING
+	struct timeval tv;
+	struct timeval tv_total_start, tv_total_end;
+	struct timeval tv_init_end;
+	struct timeval tv_h2d_start, tv_h2d_end;
+	struct timeval tv_d2h_start, tv_d2h_end;
+	struct timeval tv_kernel_start, tv_kernel_end;
+	struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+	struct timeval tv_close_start, tv_close_end;
+	float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+		  d2h_time = 0, close_time = 0, total_time = 0;
+#endif
 
 void init(int argc, char** argv)
 {
@@ -139,13 +153,26 @@ int main(int argc, char** argv)
 
 	// Create and initialize the OpenCL object.
 	OpenCL cl(verbose);  // 1 means to display output (debugging mode).
+
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
 	cl.init();    // 1 means to use GPU. 0 means use CPU.
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	cl.gwSize(rows * cols);
 
 	// Create and build the kernel.
 	string kn = "dynproc_kernel";  // the kernel name, for future use.
 	cl.createKernel(kn);
 
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 	// Allocate device memory.
 	cl_mem d_gpuWall = clCreateBuffer(cl.ctxt(),
 	                                  CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
@@ -177,6 +204,11 @@ int main(int argc, char** argv)
 	                                       sizeof(cl_int)*16384,
 	                                       h_outputBuffer,
 	                                       NULL);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	int src = 1, final_ret = 0;
 	for (int t = 0; t < rows - 1; t += pyramid_height)
@@ -206,6 +238,7 @@ int main(int argc, char** argv)
 	}
 
 	// Copy results back to host.
+	cl_event event;
 	clEnqueueReadBuffer(cl.q(),                   // The command queue.
 	                    d_gpuResult[final_ret],   // The result on the device.
 	                    CL_TRUE,                  // Blocking? (ie. Wait at this line until read has finished?)
@@ -214,8 +247,11 @@ int main(int argc, char** argv)
 	                    result,                   // The pointer to the memory on the host.
 	                    0,                        // Number of events in wait list. Not used.
 	                    NULL,                     // Event wait list. Not used.
-	                    NULL);                    // Event object for determining status. Not used.
-
+	                    &event);                  // Event object for determining status. Not used.
+#ifdef TIMING
+    kernel_time += probe_event_time(event,cl.q());
+#endif
+    clReleaseEvent(event);
 
 	// Copy string buffer used for debugging from device to host.
 	clEnqueueReadBuffer(cl.q(),                   // The command queue.
@@ -226,8 +262,11 @@ int main(int argc, char** argv)
 	                    h_outputBuffer,           // The pointer to the memory on the host.
 	                    0,                        // Number of events in wait list. Not used.
 	                    NULL,                     // Event wait list. Not used.
-	                    NULL);                    // Event object for determining status. Not used.
-	
+	                    &event);                  // Event object for determining status. Not used.
+#ifdef TIMING
+    d2h_time += probe_event_time(event,cl.q());
+#endif
+
 	// Tack a null terminator at the end of the string.
 	h_outputBuffer[16383] = '\0';
 	
@@ -240,10 +279,23 @@ int main(int argc, char** argv)
 	printf("\n");
 #endif
 
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
+	clReleaseMemObject(d_gpuWall);
+	clReleaseMemObject(d_gpuResult[0]);
+	clReleaseMemObject(d_gpuResult[1]);
+	clReleaseMemObject(d_outputBuffer);
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	// Memory cleanup here.
 	delete[] data;
 	delete[] wall;
 	delete[] result;
-	
+
 	return EXIT_SUCCESS;
 }

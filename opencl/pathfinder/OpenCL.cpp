@@ -1,5 +1,14 @@
 #include <cstdlib>
 #include "OpenCL.h"
+#include "timing.h"
+
+#ifdef TIMING
+	extern struct timeval tv;
+	extern struct timeval tv_total_start, tv_total_end;
+	extern struct timeval tv_close_start, tv_close_end;
+	extern float init_time, mem_alloc_time, h2d_time, kernel_time,
+		  d2h_time, close_time, total_time;
+#endif
 
 OpenCL::OpenCL(int displayOutput)
 {
@@ -11,7 +20,10 @@ OpenCL::~OpenCL()
 	// Flush and kill the command queue...
 	clFlush(command_queue);
 	clFinish(command_queue);
-	
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
 	// Release each kernel in the map kernelArray
 	map<string, cl_kernel>::iterator it;
 	for ( it=kernelArray.begin() ; it != kernelArray.end(); it++ )
@@ -23,6 +35,22 @@ OpenCL::~OpenCL()
 	// ...and finally, the queue and context.
 	clReleaseCommandQueue(command_queue);
 	clReleaseContext(context);
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
 }
 
 size_t OpenCL::localSize()
@@ -285,7 +313,11 @@ void OpenCL::getDevices()
 	}
 
 	// Create a command queue.
+#ifdef TIMING
+	command_queue = clCreateCommandQueue(context, device_id[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, &ret);
+#else
 	command_queue = clCreateCommandQueue(context, device_id[device_id_inuse], 0, &ret);
+#endif
 	if (ret != CL_SUCCESS)
 	{
 		printf("\nError at clCreateCommandQueue! Error code %i\n\n", ret);
