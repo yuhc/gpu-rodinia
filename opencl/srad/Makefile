@@ -20,7 +20,7 @@ OCL_LIB = -lOpenCL
 			./util/timer/timer.o \
 			-lm \
 			$(OCL_LIB_DIR) \
-			$(OCL_LIB) -o srad
+			$(OCL_LIB) -o srad.out
 
 # ======================================================================================================================================================150
 #	MAIN FUNCTION
@@ -79,7 +79,7 @@ OCL_LIB = -lOpenCL
 			$(OCL_INC_DIR)
 
 clean:
-	rm	./*.o srad\
+	rm	./*.o srad.out \
 		./kernel/*.o \
 		./util/opencl/*.o \
 		./util/graphics/*.o \
