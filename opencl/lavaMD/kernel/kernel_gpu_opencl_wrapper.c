@@ -25,6 +25,7 @@ extern "C" {
 
 #include "./../util/opencl/opencl.h"				// (in library path specified to compiler)	needed by for device functions
 #include "./../util/timer/timer.h"					// (in library path specified to compiler)	needed by timer
+#include "timing.h"
 
 //======================================================================================================================================================150
 //	KERNEL_GPU_OPENCL_WRAPPER FUNCTION HEADER
@@ -35,6 +36,9 @@ extern "C" {
 //========================================================================================================================================================================================================200
 //	KERNEL_GPU_OPENCL_WRAPPER FUNCTION
 //========================================================================================================================================================================================================200
+
+extern int platform_id_inuse;
+extern int device_id_inuse;
 
 void 
 kernel_gpu_opencl_wrapper(	par_str par_cpu,
@@ -49,16 +53,20 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	//	CPU VARIABLES
 	//======================================================================================================================================================150
 
-	// timer
-	long long time0;
-	long long time1;
-	long long time2;
-	long long time3;
-	long long time4;
-	long long time5;
-	long long time6;
+#ifdef TIMING
+    struct timeval tv;
+    struct timeval tv_total_start, tv_total_end;
+    struct timeval tv_init_end;
+    struct timeval tv_h2d_start, tv_h2d_end;
+    struct timeval tv_d2h_start, tv_d2h_end;
+    struct timeval tv_kernel_start, tv_kernel_end;
+    struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+    struct timeval tv_close_start, tv_close_end;
+    float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+          d2h_time = 0, close_time = 0, total_time = 0;
 
-	time0 = get_time();
+    gettimeofday(&tv_total_start, NULL);
+#endif
 
 	//======================================================================================================================================================150
 	//	GPU SETUP
@@ -92,7 +100,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 		fatal_CL(error, __LINE__);
 
 	// Select the 1st platform
-	cl_platform_id platform = platforms[0];
+	cl_platform_id platform = platforms[platform_id_inuse];
 
 	// Get the name of the selected platform and print it (if there are multiple platforms, choose the first one)
 	char pbuf[100];
@@ -117,7 +125,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	// Create context for selected platform being GPU
 	cl_context context;
 	context = clCreateContextFromType(	context_properties, 
-										CL_DEVICE_TYPE_GPU, 
+										CL_DEVICE_TYPE_ALL, 
 										NULL, 
 										NULL, 
 										&error);
@@ -150,7 +158,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 
 	// Select the first device (previousely selected for the context) (if there are multiple devices, choose the first one)
 	cl_device_id device;
-	device = devices[0];
+	device = devices[device_id_inuse];
 
 	// Get the name of the selected device (previousely selected for the context) and print it
 	error = clGetDeviceInfo(device, 
@@ -168,10 +176,11 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 
 	// Create a command queue
 	cl_command_queue command_queue;
-	command_queue = clCreateCommandQueue(	context, 
-											device, 
-											0, 
-											&error);
+#ifdef TIMING
+	command_queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &error);
+#else
+	command_queue = clCreateCommandQueue(context, device, 0, &error);
+#endif
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -236,6 +245,12 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
+#ifdef  TIMING
+    gettimeofday(&tv_init_end, NULL);
+    tvsub(&tv_init_end, &tv_total_start, &tv);
+    init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	//====================================================================================================100
 	//	INITIAL DRIVER OVERHEAD
 	//====================================================================================================100
@@ -251,9 +266,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	size_t global_work_size[1];
 	global_work_size[0] = dim_cpu.number_boxes * local_work_size[0];
 
-	printf("# of blocks = %d, # of threads/block = %d (ensure that device can handle)\n", global_work_size[0]/local_work_size[0], local_work_size[0]);
-
-	time1 = get_time();
+	printf("# of blocks = %lu, # of threads/block = %lu (ensure that device can handle)\n", global_work_size[0]/local_work_size[0], local_work_size[0]);
 
 	//======================================================================================================================================================150
 	//	GPU MEMORY				(MALLOC)
@@ -319,7 +332,11 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
-	time2 = get_time();
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	//======================================================================================================================================================150
 	//	GPU MEMORY				COPY IN
@@ -333,6 +350,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	//	boxes
 	//==================================================50
 
+    cl_event event1, event2, event3, event4;
 	error = clEnqueueWriteBuffer(	command_queue,			// command queue
 									d_box_gpu,				// destination
 									1,						// block the source from access until this copy operation complates (1=yes, 0=no)
@@ -341,7 +359,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 									box_cpu,				// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&event1);				// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -357,7 +375,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 									rv_cpu, 
 									0, 
 									0, 
-									0);
+									&event2);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -373,7 +391,7 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 									qv_cpu, 
 									0, 
 									0, 
-									0);
+									&event3);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -393,11 +411,21 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 									fv_cpu, 
 									0, 
 									0, 
-									0);
+									&event4);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
-	time3 = get_time();
+#ifdef TIMING
+    h2d_time += probe_event_time(event1, command_queue);
+    h2d_time += probe_event_time(event2, command_queue);
+    h2d_time += probe_event_time(event3, command_queue);
+    h2d_time += probe_event_time(event3, command_queue);
+    h2d_time += probe_event_time(event4, command_queue);
+#endif
+    clReleaseEvent(event1);
+    clReleaseEvent(event2);
+    clReleaseEvent(event3);
+    clReleaseEvent(event4);
 
 	//======================================================================================================================================================150
 	//	KERNEL
@@ -438,16 +466,18 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 									local_work_size, 
 									0, 
 									NULL, 
-									NULL);
+									&event1);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
-
+#ifdef TIMING
+    kernel_time += probe_event_time(event1, command_queue);
+#else
 	// Wait for all operations to finish NOT SURE WHERE THIS SHOULD GO
 	error = clFinish(command_queue);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
-
-	time4 = get_time();
+#endif
+    clReleaseEvent(event1);
 
 	//======================================================================================================================================================150
 	//	GPU MEMORY				COPY OUT
@@ -469,9 +499,13 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 								fv_cpu,                       // The pointer to the image on the host.
 								0,                           // Number of events in wait list. Not used.
 								NULL,                        // Event wait list. Not used.
-								NULL);                       // Event object for determining status. Not used.
+								&event1);                       // Event object for determining status. Not used.
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
+#ifdef TIMING
+    d2h_time += probe_event_time(event1, command_queue);
+#endif
+    clReleaseEvent(event1);
 
 	// (enable for testing purposes only - prints some range of output, make sure not to initialize input in main.c with random numbers for comparison across runs)
 	// int g;
@@ -480,11 +514,13 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 		// printf("%f, %f, %f, %f\n", fv_cpu[offset+g].v, fv_cpu[offset+g].x, fv_cpu[offset+g].y, fv_cpu[offset+g].z);
 	// }
 
-	time5 = get_time();
-
 	//======================================================================================================================================================150
 	//	GPU MEMORY DEALLOCATION
 	//======================================================================================================================================================150
+
+#ifdef  TIMING
+    gettimeofday(&tv_close_start, NULL);
+#endif
 
 	// Release kernels...
 	clReleaseKernel(kernel);
@@ -509,26 +545,26 @@ kernel_gpu_opencl_wrapper(	par_str par_cpu,
 	// ???
 	clReleaseContext(context);
 
-	time6 = get_time();
-
 	//======================================================================================================================================================150
 	//	DISPLAY TIMING
 	//======================================================================================================================================================150
 
-	printf("Time spent in different stages of GPU_CUDA KERNEL:\n");
+#ifdef  TIMING
+	printf("Time spent in different stages of the application:\n");
+    gettimeofday(&tv_close_end, NULL);
+    tvsub(&tv_close_end, &tv_close_start, &tv);
+    close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+    tvsub(&tv_close_end, &tv_total_start, &tv);
+    total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
 
-	printf("%15.12f s, %15.12f % : GPU: SET DEVICE / DRIVER INIT\n",	(float) (time1-time0) / 1000000, (float) (time1-time0) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f % : GPU MEM: ALO\n", 					(float) (time2-time1) / 1000000, (float) (time2-time1) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f % : GPU MEM: COPY IN\n",					(float) (time3-time2) / 1000000, (float) (time3-time2) / (float) (time6-time0) * 100);
-
-	printf("%15.12f s, %15.12f % : GPU: KERNEL\n",						(float) (time4-time3) / 1000000, (float) (time4-time3) / (float) (time6-time0) * 100);
-
-	printf("%15.12f s, %15.12f % : GPU MEM: COPY OUT\n",				(float) (time5-time4) / 1000000, (float) (time5-time4) / (float) (time6-time0) * 100);
-	printf("%15.12f s, %15.12f % : GPU MEM: FRE\n", 					(float) (time6-time5) / 1000000, (float) (time6-time5) / (float) (time6-time0) * 100);
-
-	printf("Total time:\n");
-	printf("%.12f s\n", 												(float) (time6-time0) / 1000000);
-
+    printf("Init: %f\n", init_time);
+    printf("MemAlloc: %f\n", mem_alloc_time);
+    printf("HtoD: %f\n", h2d_time);
+    printf("Exec: %f\n", kernel_time);
+    printf("DtoH: %f\n", d2h_time);
+    printf("Close: %f\n", close_time);
+    printf("Total: %f\n", total_time);
+#endif
 }
 
 //========================================================================================================================================================================================================200

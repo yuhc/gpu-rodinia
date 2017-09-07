@@ -1,1 +1,1 @@
-./lavaMD.out -boxes1d 50
+./lavaMD.out -boxes1d 50 -p 0 -d 0

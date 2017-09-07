@@ -36,13 +36,14 @@ a.out:		main.o \
 			./kernel/kernel_gpu_opencl_wrapper.o \
 			./util/num/num.o \
 			./util/timer/timer.o \
-			./util/opencl/opencl.o
+			./util/opencl/opencl.o \
+			./timing.o
 	$(C_C)	main.o \
 			./kernel/kernel_gpu_opencl_wrapper.o \
 			./util/num/num.o \
 			./util/timer/timer.o \
 			./util/opencl/opencl.o \
-			../util/timing.c \
+			./timing.o \
 			-lm \
 			$(OCL_LIB) \
 			-o lavaMD.out
@@ -65,11 +66,18 @@ main.o:		main.h \
 
 ./kernel/kernel_gpu_opencl_wrapper.o:	./kernel/kernel_gpu_opencl_wrapper.h \
 										./kernel/kernel_gpu_opencl_wrapper.c
-	$(C_C)	$(KERNEL_DIM)						./kernel/kernel_gpu_opencl_wrapper.c \
+	$(C_C)	$(KERNEL_DIM)				./kernel/kernel_gpu_opencl_wrapper.c \
 										$(OCL_INC) \
+										-I../util -DTIMING \
 										-c \
 										-o ./kernel/kernel_gpu_opencl_wrapper.o \
 										-O3
+
+./timing.o: ../util/timing.c
+	$(C_C)	$(OUTPUT) $(KERNEL_DIM) -I../util ../util/timing.c \
+			-c \
+			-o timing.o \
+			-O3
 
 ./util/num/num.o:	./util/num/num.h \
 					./util/num/num.c

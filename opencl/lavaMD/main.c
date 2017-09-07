@@ -41,6 +41,8 @@ extern "C" {
 #include <stdio.h>					// (in path known to compiler)			needed by printf
 #include <stdlib.h>					// (in path known to compiler)			needed by malloc
 #include <stdbool.h>				// (in path known to compiler)			needed by true/false
+#include <string.h>
+#include <time.h>
 
 //======================================================================================================================================================150
 //	UTILITIES
@@ -65,6 +67,9 @@ extern "C" {
 //	MAIN FUNCTION
 //========================================================================================================================================================================================================200
 
+int platform_id_inuse = 0;            // platform id in use (default: 0)
+int device_id_inuse = 0;              // device id in use (default : 0)
+
 int 
 main(	int argc, 
 		char *argv [])
@@ -73,20 +78,6 @@ main(	int argc,
 	//======================================================================================================================================================150
 	//	CPU/MCPU VARIABLES
 	//======================================================================================================================================================150
-
-	// timer
-	long long time0;
-
-	time0 = get_time();
-
-	// timer
-	long long time1;
-	long long time2;
-	long long time3;
-	long long time4;
-	long long time5;
-	long long time6;
-	long long time7;
 
 	// counters
 	int i, j, k, l, m, n;
@@ -103,8 +94,6 @@ main(	int argc,
 
 	printf("WG size of kernel = %d \n", NUMBER_THREADS);
 
-	time1 = get_time();
-
 	//======================================================================================================================================================150
 	//	CHECK INPUT ARGUMENTS
 	//======================================================================================================================================================150
@@ -115,7 +104,7 @@ main(	int argc,
 	dim_cpu.boxes1d_arg = 1;
 
 	// go through arguments
-	if(argc==3){
+	if (argc >= 3) {
 		for(dim_cpu.cur_arg=1; dim_cpu.cur_arg<argc; dim_cpu.cur_arg++){
 			// check if -boxes1d
 			if(strcmp(argv[dim_cpu.cur_arg], "-boxes1d")==0){
@@ -142,6 +131,18 @@ main(	int argc,
 					return 0;
 				}
 			}
+            else if(strcmp(argv[dim_cpu.cur_arg], "-p")==0){
+				if(argc>=dim_cpu.cur_arg+1){
+				    platform_id_inuse = atoi(argv[dim_cpu.cur_arg+1]);
+					dim_cpu.cur_arg = dim_cpu.cur_arg+1;
+				}
+			}
+            else if(strcmp(argv[dim_cpu.cur_arg], "-d")==0){
+				if(argc>=dim_cpu.cur_arg+1){
+				    device_id_inuse = atoi(argv[dim_cpu.cur_arg+1]);
+					dim_cpu.cur_arg = dim_cpu.cur_arg+1;
+				}
+			}
 			// unknown
 			else{
 				printf("ERROR: Unknown argument\n");
@@ -152,19 +153,15 @@ main(	int argc,
 		printf("Configuration used: arch = %d, cores = %d, boxes1d = %d\n", dim_cpu.arch_arg, dim_cpu.cores_arg, dim_cpu.boxes1d_arg);
 	}
 	else{
-		printf("Provide boxes1d argument, example: -boxes1d 16");
+		printf("Provide boxes1d argument, example: -boxes1d 16 [-p platform_id] [-d device_id]");
 		return 0;
 	}
-
-	time2 = get_time();
 
 	//======================================================================================================================================================150
 	//	INPUTS
 	//======================================================================================================================================================150
 
 	par_cpu.alpha = 0.5;
-
-	time3 = get_time();
 
 	//======================================================================================================================================================150
 	//	DIMENSIONS
@@ -180,8 +177,6 @@ main(	int argc,
 
 	// box array
 	dim_cpu.box_mem = dim_cpu.number_boxes * sizeof(box_str);
-
-	time4 = get_time();
 
 	//======================================================================================================================================================150
 	//	SYSTEM MEMORY
@@ -286,8 +281,6 @@ main(	int argc,
 		fv_cpu[i].z = 0;								// set to 0, because kernels keeps adding to initial value
 	}
 
-	time5 = get_time();
-
 	//======================================================================================================================================================150
 	//	KERNEL
 	//======================================================================================================================================================150
@@ -302,8 +295,6 @@ main(	int argc,
 								rv_cpu,
 								qv_cpu,
 								fv_cpu);
-
-	time6 = get_time();
 
 	//======================================================================================================================================================150
 	//	SYSTEM MEMORY DEALLOCATION
@@ -325,26 +316,11 @@ main(	int argc,
 	free(fv_cpu);
 	free(box_cpu);
 
-	time7 = get_time();
-
 	//======================================================================================================================================================150
 	//	DISPLAY TIMING
 	//======================================================================================================================================================150
 
 	// printf("Time spent in different stages of the application:\n");
-
-	// printf("%15.12f s, %15.12f % : VARIABLES\n",						(float) (time1-time0) / 1000000, (float) (time1-time0) / (float) (time7-time0) * 100);
-	// printf("%15.12f s, %15.12f % : INPUT ARGUMENTS\n", 					(float) (time2-time1) / 1000000, (float) (time2-time1) / (float) (time7-time0) * 100);
-	// printf("%15.12f s, %15.12f % : INPUTS\n",							(float) (time3-time2) / 1000000, (float) (time3-time2) / (float) (time7-time0) * 100);
-	// printf("%15.12f s, %15.12f % : dim_cpu\n", 							(float) (time4-time3) / 1000000, (float) (time4-time3) / (float) (time7-time0) * 100);
-	// printf("%15.12f s, %15.12f % : SYS MEM: ALO\n",						(float) (time5-time4) / 1000000, (float) (time5-time4) / (float) (time7-time0) * 100);
-
-	// printf("%15.12f s, %15.12f % : KERNEL: COMPUTE\n",					(float) (time6-time5) / 1000000, (float) (time6-time5) / (float) (time7-time0) * 100);
-
-	// printf("%15.12f s, %15.12f % : SYS MEM: FRE\n", 					(float) (time7-time6) / 1000000, (float) (time7-time6) / (float) (time7-time0) * 100);
-
-	// printf("Total time:\n");
-	// printf("%.12f s\n", 												(float) (time7-time0) / 1000000);
 
 	//======================================================================================================================================================150
 	//	RETURN
