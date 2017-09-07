@@ -90,14 +90,14 @@ void dump(cl_mem variables, int nel, int nelr){
 	download(h_variables, variables, nelr*NVAR);
 
 	{
-		std::ofstream file("density");
+		std::ofstream file("density.txt");
 		file << nel << " " << nelr << std::endl;
 		for(int i = 0; i < nel; i++) file << h_variables[i + VAR_DENSITY*nelr] << std::endl;
 	}
 
 
 	{
-		std::ofstream file("momentum");
+		std::ofstream file("momentum.txt");
 		file << nel << " " << nelr << std::endl;
 		for(int i = 0; i < nel; i++)
 		{
@@ -108,7 +108,7 @@ void dump(cl_mem variables, int nel, int nelr){
 	}
 	
 	{
-		std::ofstream file("density_energy");
+		std::ofstream file("density_energy.txt");
 		file << nel << " " << nelr << std::endl;
 		for(int i = 0; i < nel; i++) file << h_variables[i + VAR_DENSITY_ENERGY*nelr] << std::endl;
 	}
@@ -379,6 +379,7 @@ int main(int argc, char** argv){
 		_clFree(step_factors);
 		_clRelease();
 		std::cout << "Done..." << std::endl;
+		_clPrintTiming();
 	}
 	catch(string msg){
 		std::cout<<"--cambine:( an exception catched in main body ->"<<msg<<std::endl;		

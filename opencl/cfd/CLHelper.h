@@ -12,6 +12,7 @@
 #include <fstream>
 #include <string>
 #include "util.h"
+#include "timing.h"
 
 using std::string;
 using std::ifstream;
@@ -19,7 +20,7 @@ using std::cerr;
 using std::endl;
 using std::cout;
 
-#define PROFILE_
+//#define PROFILE_
 #ifdef PROFILE_
 double TE;	//: total execution time;
 double CC;	//: Context creation time;
@@ -31,6 +32,20 @@ double D2H;	//: the time to transfer data from device to host;
 double D2D; //: the time to transfer data from device to device;
 double KE;	//: the kernel execution time
 double KC;  //: the kernel compilation time
+#endif
+
+#ifdef TIMING
+//Primitives for timing
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time= 0,
+      d2h_time = 0, d2d_time = 0, close_time = 0, total_time = 0;
 #endif
 
 //#pragma OPENCL EXTENSION cl_nv_compiler_options:enable
@@ -246,6 +261,7 @@ string FileToString(const string fileName){
 ------------------------------------------------------------*/
 char device_type[3];
 int device_id = 0;
+int platform_id = 0;
 void _clCmdParams(int argc, char* argv[]){
 	for (int i = 0; i < argc; ++i){
 		switch (argv[i][1]){
@@ -267,6 +283,15 @@ void _clCmdParams(int argc, char* argv[]){
 					throw;
 				}
 				break;
+			  case 'p':	 //--p stands for platform id
+				if (++i < argc){
+					sscanf(argv[i], "%d", &platform_id);
+				}
+				else{
+					std::cerr << "Could not read argument after option " << argv[i-1] << std::endl;
+					throw;
+				}
+				break;
 			default:
 				;
 		}
@@ -276,6 +301,7 @@ void _clCmdParams(int argc, char* argv[]){
 /*------------------------------------------------------------
 	@function:	Initlize CL objects
 	@params:	
+        platform_id: platform id
 		device_id: device id
 		device_type: the types of devices, e.g. CPU, GPU, ACCERLERATOR,...	
 		(1) -t cpu/gpu/acc -d 0/1/2/...
@@ -290,6 +316,9 @@ void _clCmdParams(int argc, char* argv[]){
 	@date:		24/03/2011
 ------------------------------------------------------------*/
 void _clInit(string device_type, int device_id)throw(string){
+#ifdef TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
 
 #ifdef PROFILE_
 	TE = 0;
@@ -340,7 +369,7 @@ void _clInit(string device_type, int device_id)throw(string){
         throw (string("InitCL()::Error: Getting platform ids (clGetPlatformIDs)"));
 
     // Select the target platform. Default: first platform 
-    targetPlatform = allPlatforms[0];
+    targetPlatform = allPlatforms[platform_id];
     for (int i = 0; i < numPlatforms; i++)
     {
         char pbuff[128];
@@ -464,10 +493,18 @@ void _clInit(string device_type, int device_id)throw(string){
 
    //-----------------------------------------------
    //--cambine-4: Create an OpenCL command queue    
+#ifdef TIMING
     oclHandles.queue = clCreateCommandQueue(oclHandles.context, 
                                             oclHandles.devices[DEVICE_ID_INUSED], 
-                                            0, 
+                                            CL_QUEUE_PROFILING_ENABLE,
                                             &resultCL);
+#else
+    oclHandles.queue = clCreateCommandQueue(oclHandles.context, 
+                                            oclHandles.devices[DEVICE_ID_INUSED], 
+                                            CL_QUEUE_PROFILING_ENABLE,
+                                            &resultCL);
+#endif
+
 
     if ((resultCL != CL_SUCCESS) || (oclHandles.queue == NULL))
         throw(string("InitCL()::Creating Command Queue. (clCreateCommandQueue)"));
@@ -598,6 +635,12 @@ void _clInit(string device_type, int device_id)throw(string){
 	double t4 = gettime();
 	CC += t4 - t3;
 #endif
+
+#ifdef  TIMING
+    gettimeofday(&tv_init_end, NULL);
+    tvsub(&tv_init_end, &tv_total_start, &tv);
+    init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
 
 /*------------------------------------------------------------
@@ -608,6 +651,10 @@ void _clInit(string device_type, int device_id)throw(string){
 ------------------------------------------------------------*/
 void _clRelease()
 {
+#ifdef TIMING
+    gettimeofday(&tv_close_start, NULL);
+#endif
+
 #ifdef PROFILE_
 	double t1 = gettime();
 #endif
@@ -660,6 +707,11 @@ void _clRelease()
 	double t2 = gettime();
 	CR += t2 - t1;
 #endif
+#ifdef TIMING
+    gettimeofday(&tv_close_end, NULL);
+    tvsub(&tv_close_end, &tv_close_start, &tv);
+    close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
 
 /*------------------------------------------------------------
@@ -670,6 +722,10 @@ void _clRelease()
 	@date:		24/03/2011
 ------------------------------------------------------------*/
 cl_mem _clMalloc(int size) throw(string){
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
+
 #ifdef PROFILE_
 	double t1 = gettime();
 #endif
@@ -708,6 +764,13 @@ cl_mem _clMalloc(int size) throw(string){
 	double t2 = gettime();
 	MA += t2 - t1;
 #endif
+
+#ifdef  TIMING
+        gettimeofday(&tv_mem_alloc_end, NULL);
+        tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+        mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	return d_mem;
 }
 /*------------------------------------------------------------
@@ -883,7 +946,8 @@ void _clMemcpyH2D(cl_mem dst, const void *src, int size) throw(string){
 #ifdef PROFILE_
 	double t1 = gettime();
 #endif
-	oclHandles.cl_status = clEnqueueWriteBuffer(oclHandles.queue, dst, CL_TRUE, 0, size, src, 0, NULL, NULL);
+    cl_event event;
+	oclHandles.cl_status = clEnqueueWriteBuffer(oclHandles.queue, dst, CL_TRUE, 0, size, src, 0, NULL, &event);
 #ifdef ERRMSG
 	if(oclHandles.cl_status != CL_SUCCESS){
 		oclHandles.error_str = "excpetion in _clMemcpyH2D -> ";
@@ -920,6 +984,9 @@ void _clMemcpyH2D(cl_mem dst, const void *src, int size) throw(string){
 	double t2 = gettime();
 	H2D += t2 - t1;
 #endif
+#ifdef TIMING
+    h2d_time += probe_event_time(event, oclHandles.queue);
+#endif
 }
 
 /*------------------------------------------------------------
@@ -935,7 +1002,8 @@ void _clMemcpyD2H(void * dst, cl_mem src, int size) throw(string){
 #ifdef PROFILE_
 	double t1 = gettime();
 #endif
-	oclHandles.cl_status = clEnqueueReadBuffer(oclHandles.queue, src, CL_TRUE, 0, size, dst, 0,0,0);
+    cl_event event;
+	oclHandles.cl_status = clEnqueueReadBuffer(oclHandles.queue, src, CL_TRUE, 0, size, dst, 0,0,&event);
 #ifdef ERRMSG
 	if(oclHandles.cl_status != CL_SUCCESS){
 		oclHandles.error_str = "excpetion in _clMemCpyD2H -> ";
@@ -972,6 +1040,9 @@ void _clMemcpyD2H(void * dst, cl_mem src, int size) throw(string){
 	double t2 = gettime();
 	D2H += t2 - t1;
 #endif
+#ifdef TIMING
+    d2h_time += probe_event_time(event, oclHandles.queue);
+#endif
 }
 /*------------------------------------------------------------
 	@function:	transfer data from device to device
@@ -986,7 +1057,8 @@ void _clMemcpyD2D(cl_mem dst, cl_mem src, int size) throw(string){
 #ifdef PROFILE_
 	double t1 = gettime();
 #endif
-	oclHandles.cl_status = clEnqueueCopyBuffer(oclHandles.queue, src, dst, 0, 0, size, 0, NULL, NULL);
+    cl_event event;
+	oclHandles.cl_status = clEnqueueCopyBuffer(oclHandles.queue, src, dst, 0, 0, size, 0, NULL, &event);
 #ifdef ERRMSG
 	if(oclHandles.cl_status != CL_SUCCESS){
 		oclHandles.error_str = "excpetion in _clCpyMemD2D -> ";
@@ -1031,6 +1103,9 @@ void _clMemcpyD2D(cl_mem dst, cl_mem src, int size) throw(string){
 #ifdef PROFILE_
 	double t2 = gettime();
 	D2D += t2 - t1;
+#endif
+#ifdef TIMING
+    d2d_time += probe_event_time(event, oclHandles.queue);
 #endif
 }
 
@@ -1253,6 +1328,9 @@ void _clInvokeKernel(int kernel_id, int work_items, int work_group_size) throw(s
 	double t2 = gettime();
 	KE += t2 - t1;
 #endif
+#ifdef TIMING
+    kernel_time += probe_event_time(e[0], oclHandles.queue);
+#endif
 }
 
 /*------------------------------------------------------------
@@ -1373,6 +1451,10 @@ void _clInvokeKernel2D(int kernel_id, int range_x, int range_y, int group_x, int
 ------------------------------------------------------------*/
 
 void _clFree(cl_mem ob) throw(string){
+#ifdef TIMING
+    gettimeofday(&tv_close_start, NULL);
+#endif
+
 #ifdef PROFILE_
 	double t1 = gettime();	
 #endif
@@ -1402,6 +1484,11 @@ void _clFree(cl_mem ob) throw(string){
 	double t2 = gettime();
 	MF += t2 - t1;
 #endif
+#ifdef TIMING
+    gettimeofday(&tv_close_end, NULL);
+    tvsub(&tv_close_end, &tv_close_start, &tv);
+    close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
 
 /*------------------------------------------------------------
@@ -1417,5 +1504,23 @@ void _clStatistics(){
 	fclose(fp_pd);
 #endif	
 	return ;
+}
+
+void _clPrintTiming(){
+#ifdef TIMING
+    gettimeofday(&tv_total_end, NULL);
+    tvsub(&tv_total_end, &tv_total_start, &tv);
+    total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+    printf("Init: %f\n", init_time);
+    printf("MemAlloc: %f\n", mem_alloc_time);
+    printf("HtoD: %f\n", h2d_time);
+    printf("DtoD: %f\n", d2d_time);
+    printf("Exec: %f\n", kernel_time);
+    printf("DtoH: %f\n", d2h_time);
+    printf("Close: %f\n", close_time);
+    printf("Total: %f\n", total_time);
+#endif
+
 }
 #endif //_CL_HELPER_
