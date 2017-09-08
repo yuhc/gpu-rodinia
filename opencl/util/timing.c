@@ -25,12 +25,16 @@ float probe_event_time(cl_event event, cl_command_queue command_queue) {
     clFinish(command_queue);
     error = clGetEventProfilingInfo(event,CL_PROFILING_COMMAND_START,
                                     sizeof(cl_ulong),&eventStart,NULL);
-    if (error != CL_SUCCESS)
-        printf("ERROR in Event Profiling.");
+    if (error != CL_SUCCESS) {
+        printf("ERROR (%d) in event start profiling.\n", error);
+        return 0;
+    }
     error = clGetEventProfilingInfo(event,CL_PROFILING_COMMAND_END,
                                     sizeof(cl_ulong),&eventEnd,NULL);
-    if (error != CL_SUCCESS)
-        printf("ERROR in Event Profiling.");
+    if (error != CL_SUCCESS) {
+        printf("ERROR (%d) in event end profiling.\n", error);
+        return 0;
+    }
 
     return (float)((eventEnd-eventStart)/1000000.0);
 }
