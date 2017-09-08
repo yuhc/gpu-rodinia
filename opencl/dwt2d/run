@@ -1,2 +1,2 @@
-#./dwt2d 192.bmp -d 192x192 -f -5 -l 3
-./dwt2d rgb.bmp -d 1024x1024 -f -5 -l 3
+#./dwt2d.out 192.bmp -D 192x192 -f -5 -l 3
+./dwt2d.out rgb.bmp -D 1024x1024 -f -5 -l 3 -p 1 -d 0

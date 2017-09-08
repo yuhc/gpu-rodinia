@@ -4,11 +4,21 @@
 #
 include ../../common/make.config
 
+#Can be changed by `make TYPE=CPU`
+TYPE = GPU
+
+#Library
+ifeq ($(TYPE),GPU)
+	OPENCL_INC = $(NV_OPENCL_INC)
+	OPENCL_LIB = $(NV_OPENCL_LIB)
+else
+	OPENCL_INC = $(INTEL_OPENCL_INC)
+	OPENCL_LIB = $(INTEL_OPENCL_LIB)
+endif
 
 ifdef OUTPUT
 	override OUTPUT = -DOUTPUT
 endif
-
 
 OUTPUT = -DOUTPUT
 
@@ -23,13 +33,14 @@ components:
 	$(C_C) -o components.o $(OCL_INC) -c components.cpp 
 
 dwt2d:
-	$(C_C) -o dwt2d $(OCL_INC) \
-		main.cpp \
+	$(C_C) -o dwt2d.out $(OCL_INC) \
+		-I../util -DTIMING \
+		main.cpp ../util/timing.c \
 		$(components) \
 		$(OUTPUT) \
 		$(OCL_LIB)
 
 clean:	
-	rm -rf *.o dwt2d
+	rm -rf *.o dwt2d.out
 	rm *.bmp.dwt.*
 

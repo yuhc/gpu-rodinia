@@ -48,8 +48,25 @@ cl_kernel c_CopySrcToComponent = 0;
 cl_kernel kl_fdwt53Kernel;
 cl_mem memObjects[3] = { 0, 0, 0 };
 cl_int errNum = 0;
+int platform = 0;
+int device = 0;
 
 
+#ifdef TIMING
+#include "timing.h"
+
+//Primitives for timing
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time= 0,
+      d2h_time = 0, d2d_time = 0, close_time = 0, total_time = 0;
+#endif
 
 ///
 // functions for preparing create opencl program, contains CreateContext, CreateProgram, CreateCommandQueue, CreateMemBuffer, and Cleanup
@@ -70,7 +87,7 @@ cl_context CreateContext()
     cl_context_properties contextProperties[] =
     {
         CL_CONTEXT_PLATFORM,
-        (cl_context_properties)platformIds[0],
+        (cl_context_properties)platformIds[platform],
         0
     };
     context = clCreateContextFromType(contextProperties, CL_DEVICE_TYPE_GPU,
@@ -125,7 +142,11 @@ cl_command_queue CreateCommandQueue(cl_context context, cl_device_id *cldevice)
         return NULL;
     }
 
-    commandQueue = clCreateCommandQueue(context, cldevices[0], 0, NULL);
+#ifdef TIMING
+    commandQueue = clCreateCommandQueue(context, cldevices[device], CL_QUEUE_PROFILING_ENABLE, NULL);
+#else
+    commandQueue = clCreateCommandQueue(context, cldevices[device], 0, NULL);
+#endif
     if (commandQueue == NULL)
     {
         delete [] cldevices;
@@ -133,7 +154,7 @@ cl_command_queue CreateCommandQueue(cl_context context, cl_device_id *cldevice)
         return NULL;
     }
 
-    *cldevice = cldevices[0];
+    *cldevice = cldevices[device];
     delete [] cldevices;
     return commandQueue;
 }
@@ -242,11 +263,12 @@ int getImg(char * srcFilename, unsigned char *srcImg, int inputSize)
 //
 void usage() {
     printf("dwt [otpions] src_img.rgb <out_img.dwt>\n\
-  -d, --dimension\t\tdimensions of src img, e.g. 1920x1080\n\
+  -D, --dimension\t\tdimensions of src img, e.g. 1920x1080\n\
   -c, --components\t\tnumber of color components, default 3\n\
   -b, --depth\t\t\tbit depth, default 8\n\
   -l, --level\t\t\tDWT level, default 3\n\
-  -D, --device\t\t\tcuda device\n\
+  -d, --device\t\t\tocl device\n\
+  -p, --platform\t\t\tocl platform\n\
   -f, --forward\t\t\tforward transform\n\
   -r, --reverse\t\t\treverse transform\n\
   -9, --97\t\t\t9/7 transform\n\
@@ -331,10 +353,18 @@ void rgbToComponents(cl_mem d_r, cl_mem d_g, cl_mem d_b, unsigned char * h_src, 
 {
     int pixels      = width * height;
     int alignedSize =  DIVANDRND(width*height, THREADS) * THREADS * 3; //aligned to thread block size -- THREADS
-	
+
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 	cl_mem cl_d_src;
 	cl_d_src = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, pixels*3, h_src, &errNum);
 	// fatal_CL(errNum, __LINE__);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	size_t globalWorkSize[1] = { alignedSize/3};
     size_t localWorkSize[1] = { THREADS };
@@ -345,13 +375,26 @@ void rgbToComponents(cl_mem d_r, cl_mem d_g, cl_mem d_b, unsigned char * h_src, 
 	errNum |= clSetKernelArg(c_CopySrcToComponents, 3, sizeof(cl_mem), &cl_d_src);
 	errNum |= clSetKernelArg(c_CopySrcToComponents, 4, sizeof(int), &pixels);
 	// fatal_CL(errNum, __LINE__);	
-	
-	errNum = clEnqueueNDRangeKernel(commandQueue, c_CopySrcToComponents, 1, NULL, globalWorkSize, localWorkSize, 0, NULL, NULL);
+
+    cl_event event;
+	errNum = clEnqueueNDRangeKernel(commandQueue, c_CopySrcToComponents, 1, NULL, globalWorkSize, localWorkSize, 0, NULL, &event);
 	// fatal_CL(errNum, __LINE__);
-	
+#ifdef TIMING
+    kernel_time += probe_event_time(event, commandQueue);
+#endif
+
     // Free Memory 
+#ifdef TIMING
+    gettimeofday(&tv_close_start, NULL);
+#endif
 	errNum = clReleaseMemObject(cl_d_src);  
 	// fatal_CL(errNum, __LINE__);	
+#ifdef TIMING
+    gettimeofday(&tv_close_end, NULL);
+    tvsub(&tv_close_end, &tv_close_start, &tv);
+    close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 }
 
 
@@ -364,10 +407,18 @@ void bwToComponent(cl_mem d_c, unsigned char * h_src, int width, int height)
 	cl_mem cl_d_src;
     int pixels      = width*height;
     int alignedSize =  DIVANDRND(pixels, THREADS) * THREADS;
-	
+
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 	cl_d_src = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, pixels, h_src, NULL);
 	// fatal_CL(errNum, __LINE__);
-	
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	size_t globalWorkSize[1] = { alignedSize/9};
     size_t localWorkSize[1] = { THREADS };
 	assert(alignedSize%(THREADS*3) == 0);
@@ -377,14 +428,27 @@ void bwToComponent(cl_mem d_c, unsigned char * h_src, int width, int height)
 	errNum |= clSetKernelArg(c_CopySrcToComponent, 2, sizeof(int), &pixels);
 	// fatal_CL(errNum, __LINE__);	
 	
-	errNum = clEnqueueNDRangeKernel(commandQueue, c_CopySrcToComponent, 1, NULL, globalWorkSize, localWorkSize, 0, NULL, NULL);
+    cl_event event;
+	errNum = clEnqueueNDRangeKernel(commandQueue, c_CopySrcToComponent, 1, NULL, globalWorkSize, localWorkSize, 0, NULL, &event);
+#ifdef TIMING
+    kernel_time += probe_event_time(event, commandQueue);
+#endif
+
 	std::cout<<"in function bwToComponent errNum= "<<errNum<<"\n"; 
 	// fatal_CL(errNum, __LINE__);
 	std::cout<<"bwToComponent has finished\n";
 	
     // Free Memory 
+#ifdef TIMING
+    gettimeofday(&tv_close_start, NULL);
+#endif
 	errNum = clReleaseMemObject(cl_d_src);  
 	// fatal_CL(errNum, __LINE__);	
+#ifdef TIMING
+    gettimeofday(&tv_close_end, NULL);
+    tvsub(&tv_close_end, &tv_close_start, &tv);
+    close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 }
 
@@ -541,9 +605,18 @@ int writeLinear(cl_mem component, int pixWidth, int pixHeight, const char * file
 	gpu_output = (int *)malloc(size);
     memset(gpu_output, 0, size);
 	result = (unsigned char *)malloc(samplesNum);
-	
+
+    // ReadBuffer op is blocking, and it does not always succeed.
+#ifdef TIMING
+    gettimeofday(&tv_d2h_start, NULL);
+#endif
 	errNum = clEnqueueReadBuffer(commandQueue, component, CL_TRUE, 0, size, gpu_output, 0, NULL, NULL);
-	// fatal_CL(errNum, __LINE__);	
+	// fatal_CL(errNum, __LINE__);
+#ifdef TIMING
+    gettimeofday(&tv_d2h_end, NULL);
+    tvsub(&tv_d2h_end, &tv_d2h_start, &tv);
+    d2h_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	// T to char 
 	samplesToChar(result, gpu_output, samplesNum);
@@ -639,9 +712,17 @@ int writeNStage2DDWT(cl_mem component, int pixWidth, int pixHeight, int stages, 
     memset(dst, 0, size);
 	result = (unsigned char *)malloc(samplesNum);
 
+    // ReadBuffer op is blocking, and it does not always succeed.
+#ifdef TIMING
+    gettimeofday(&tv_d2h_start, NULL);
+#endif
 	errNum = clEnqueueReadBuffer(commandQueue, component, CL_TRUE, 0, size, src, 0, NULL, NULL);
 	// fatal_CL(errNum, __LINE__);	
-	
+#ifdef TIMING
+    gettimeofday(&tv_d2h_end, NULL);
+    tvsub(&tv_d2h_end, &tv_d2h_start, &tv);
+    d2h_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	// LL Band 	
 	size = bandDims[stages-1].LL.dimX * sizeof(int);
@@ -727,12 +808,13 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
 	// initialize to zeros
 	T *temp = (T *)malloc(componentSize);
 	memset(temp, 0, componentSize);
-	
+
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 	cl_mem cl_c_r_out;
 	cl_c_r_out = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, componentSize, temp, &errNum);
 	// fatal_CL(errNum, __LINE__);
-	
-	
 	
 	cl_mem cl_backup;
 	cl_backup  = clCreateBuffer(context, CL_MEM_READ_WRITE |CL_MEM_COPY_HOST_PTR, componentSize, temp, &errNum);  
@@ -756,18 +838,23 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
 		// fatal_CL(errNum, __LINE__);		
 		cl_c_b = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,componentSize, temp, &errNum); 
 		// fatal_CL(errNum, __LINE__);
-		
-		
+
+#ifdef  TIMING
+        gettimeofday(&tv_mem_alloc_end, NULL);
+        tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+        mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
         rgbToComponents(cl_c_r, cl_c_g, cl_c_b, d->srcImg, d->pixWidth, d->pixHeight);
-       
-        
+
+
         //Compute DWT and always store int file
-       
+
         nStage2dDWT(cl_c_r, cl_c_r_out, cl_backup, d->pixWidth, d->pixHeight, d->dwtLvls, forward);
         nStage2dDWT(cl_c_g, cl_c_g_out, cl_backup, d->pixWidth, d->pixHeight, d->dwtLvls, forward);
         nStage2dDWT(cl_c_b, cl_c_b_out, cl_backup, d->pixWidth, d->pixHeight, d->dwtLvls, forward);
-        
-        
+
+
         // ---------test----------
 /*      T *h_r_out=(T*)malloc(componentSize);
 		errNum = clEnqueueReadBuffer(commandQueue, cl_c_g_out, CL_TRUE, 0, componentSize, h_r_out, 0, NULL, NULL); 
@@ -793,6 +880,9 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
         }
 #endif		
 		
+#ifdef TIMING
+        gettimeofday(&tv_close_start, NULL);
+#endif
 		clReleaseMemObject(cl_c_r);
 		clReleaseMemObject(cl_c_g);
 		clReleaseMemObject(cl_c_b);
@@ -800,11 +890,19 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
 		clReleaseMemObject(cl_c_b_out);
 
 	} else if(d->components == 1) { 
+#ifdef  TIMING
+        gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
         // Load components 
         cl_mem cl_c_r;
 		cl_c_r = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,componentSize, temp, &errNum);
 		// fatal_CL(errNum, __LINE__); 		
-        
+ #ifdef  TIMING
+        gettimeofday(&tv_mem_alloc_end, NULL);
+        tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+        mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
         bwToComponent(cl_c_r, d->srcImg, d->pixWidth, d->pixHeight);
 
         // Compute DWT
@@ -816,14 +914,22 @@ void processDWT(struct dwt *d, int forward, int writeVisual)
         } else {
             writeLinear(cl_c_r_out, d->pixWidth, d->pixHeight, d->outFilename, ".r");
         }
-		
-		
+
+#ifdef TIMING
+        gettimeofday(&tv_close_start, NULL);
+#endif
 		clReleaseMemObject(cl_c_r);
 
     } 
 
 	free(temp);
 	clReleaseMemObject(cl_c_r_out);
+
+#ifdef TIMING
+    gettimeofday(&tv_close_end, NULL);
+    tvsub(&tv_close_end, &tv_close_start, &tv);
+    close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
 
 
@@ -834,11 +940,12 @@ int main(int argc, char **argv)
     char ch;
     struct option longopts[] = 
 	{
-        {"dimension",   required_argument, 0, 'd'}, //dimensions of src img
+        {"dimension",   required_argument, 0, 'D'}, //dimensions of src img
         {"components",  required_argument, 0, 'c'}, //numger of components of src img
         {"depth",       required_argument, 0, 'b'}, //bit depth of src img
         {"level",       required_argument, 0, 'l'}, //level of dwt
-        {"device",      required_argument, 0, 'D'}, //cuda device
+        {"device",      required_argument, 0, 'd'}, //ocl device
+        {"platform",    required_argument, 0, 'p'}, //ocl platform
         {"forward",     no_argument,       0, 'f'}, //forward transform
         {"reverse",     no_argument,       0, 'r'}, //forward transform
         {"97",          no_argument,       0, '9'}, //9/7 transform
@@ -852,16 +959,15 @@ int main(int argc, char **argv)
     int compCount   = 3; //number of components; 3 for RGB or YUV, 4 for RGBA
     int bitDepth    = 8; 
     int dwtLvls     = 3; //default numuber of DWT levels
-    int device      = 0;
     int forward     = 1; //forward transform
     int dwt97       = 0; //1=dwt9/7, 0=dwt5/3 transform
     int writeVisual = 0; //write output (subbands) in visual (tiled) order instead of linear
     char * pos;
  
-    while ((ch = getopt_long(argc, argv, "d:c:b:l:D:fr95wh", longopts, &optindex)) != -1) 
+    while ((ch = getopt_long(argc, argv, "d:p:c:b:l:D:fr95wh", longopts, &optindex)) != -1) 
 	{
         switch (ch) {
-        case 'd':
+        case 'D':
             pixWidth = atoi(optarg);
             pos = strstr(optarg, "x");
             if (pos == NULL || pixWidth == 0 || (strlen(pos) >= strlen(optarg))) 
@@ -880,8 +986,11 @@ int main(int argc, char **argv)
         case 'l':
             dwtLvls = atoi(optarg);
             break;
-        case 'D':
+        case 'd':
             device = atoi(optarg);
+            break;
+        case 'p':
+            platform = atoi(optarg);
             break;
         case 'f':
             forward = 1;
@@ -931,9 +1040,11 @@ int main(int argc, char **argv)
     }
 
 
-	//
 	// device init
 	// Create an OpenCL context on first available platform
+#ifdef TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
     context = CreateContext();
     if (context == NULL)
     {
@@ -975,9 +1086,13 @@ int main(int argc, char **argv)
 	{
 		std::cerr<<"Failed to create kernel\n";
 	}
-	
+#ifdef  TIMING
+    gettimeofday(&tv_init_end, NULL);
+    tvsub(&tv_init_end, &tv_total_start, &tv);
+    init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
-	
+
 	//initialize struct dwt
 	struct dwt *d;
     d = (struct dwt *)malloc(sizeof(struct dwt));
@@ -1034,9 +1149,29 @@ int main(int argc, char **argv)
             processDWT<int>(d, forward, writeVisual);
     }
 
+#ifdef TIMING
+    gettimeofday(&tv_close_start, NULL);
+#endif
+
 	Cleanup(context, commandQueue, program, kernel);
 	clReleaseKernel(c_CopySrcToComponents);
 	clReleaseKernel(c_CopySrcToComponent);
+
+#ifdef TIMING
+    gettimeofday(&tv_total_end, NULL);
+    tvsub(&tv_total_end, &tv_close_start, &tv);
+    close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+    tvsub(&tv_total_end, &tv_total_start, &tv);
+    total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+    printf("Init: %f\n", init_time);
+    printf("MemAlloc: %f\n", mem_alloc_time);
+    printf("HtoD: %f\n", h2d_time);
+    printf("Exec: %f\n", kernel_time);
+    printf("DtoH: %f\n", d2h_time);
+    printf("Close: %f\n", close_time);
+    printf("Total: %f\n", total_time);
+#endif
 
     free(d->srcFilename);
     free(d->srcImg);
