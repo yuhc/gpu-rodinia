@@ -109,7 +109,16 @@ float pgain( long x, Points *points, float z, long int *numcenters, int kmax, bo
 #endif
 	coord_h = (float*) malloc( num * dim * sizeof(float));								// coordinates (host)
 	gl_lower = (float*) malloc( kmax * sizeof(float) );
+#ifdef  TIMING
+	gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 	work_mem_h = (float*)_clMallocHost(kmax*num*sizeof(float));
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	p_h = (Point_Struct*)malloc(num*sizeof(Point_Struct));	//by cambine: not compatibal with original Point
 	
 	// prepare mapping for point coordinates
@@ -122,8 +131,16 @@ float pgain( long x, Points *points, float z, long int *numcenters, int kmax, bo
 	double t4 = gettime();
 	*serial += t4 - t3;
 #endif
+#ifdef  TIMING
+	gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
 
 	allocDevMem(num, dim, kmax);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 #ifdef PROFILE_TMP
 	double t5 = gettime();
 	*gpu_malloc += t5 - t4;
@@ -225,7 +242,7 @@ float pgain( long x, Points *points, float z, long int *numcenters, int kmax, bo
 		    }
 		}
 		gl_cost += work_mem_h[i*(K+1)+K];
-	}
+}
 
 	/* if opening a center at x saves cost (i.e. cost is negative) do so
 		otherwise, do nothing */

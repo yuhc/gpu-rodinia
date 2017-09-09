@@ -34,6 +34,22 @@ double KE;	//: the kernel execution time
 double KC;  //: the kernel compilation time
 #endif
 
+//Primitives for timing
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
 //#pragma OPENCL EXTENSION cl_nv_compiler_options:enable
 #define WORK_DIM 2	//work-items dimensions
 /*------------------------------------------------------------
@@ -215,14 +231,14 @@ string FileToString(const string fileName){
 	@return:
 	@date:		24/03/2011
 ------------------------------------------------------------*/
-char device_type[3];
 int device_id = 0;
+int platform_id = 0;
 void _clCmdParams(int argc, char* argv[]){
 	for (int i = 0; i < argc; ++i){
 		switch (argv[i][1]){
-			case 't':	//--t stands for device type
+			case 'p':	//--t stands for platform 
 				if (++i < argc){
-					sscanf(argv[i], "%s", device_type);
+					sscanf(argv[i], "%d", &platform_id);
 				}
 				else{
 					std::cerr << "Could not read argument after option " << argv[i-1] << std::endl;
@@ -260,7 +276,7 @@ void _clCmdParams(int argc, char* argv[]){
 		get the number of devices and devices have no relationship with context
 	@date:		24/03/2011
 ------------------------------------------------------------*/
-void _clInit(string device_type, int device_id)throw(string){
+void _clInit(int platform_id, int device_id)throw(string){
 
 #ifdef PROFILE_
 	TE = 0;
@@ -311,7 +327,7 @@ void _clInit(string device_type, int device_id)throw(string){
         throw (string("InitCL()::Error: Getting platform ids (clGetPlatformIDs)"));
 
     // Select the target platform. Default: first platform 
-    targetPlatform = allPlatforms[0];
+    targetPlatform = allPlatforms[platform_id];
     for (int i = 0; i < numPlatforms; i++)
     {
         char pbuff[128];
@@ -333,36 +349,14 @@ void _clInit(string device_type, int device_id)throw(string){
     //-----------------------------------------------
     //--cambine-2: detect OpenCL devices	
     // First, get the size of device list 
-    if(device_type.compare("")!=0){
-		if(device_type.compare("cpu")==0){
-		   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_CPU, 0, NULL, &deviceListSize);
-		   if(oclHandles.cl_status!=CL_SUCCESS){
-			   throw(string("exception in _clInit -> clGetDeviceIDs -> CPU"));   				
-	       }
-		}	
-		if(device_type.compare("gpu")==0){		   
-		   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_GPU, 0, NULL, &deviceListSize);
-		   if(oclHandles.cl_status!=CL_SUCCESS){
-			   throw(string("exception in _clInit -> clGetDeviceIDs -> GPU"));   	
-	       }
-		}
-		if(device_type.compare("acc")==0){
-		   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ACCELERATOR, 0, NULL, &deviceListSize);
-		   if(oclHandles.cl_status!=CL_SUCCESS){
-			   throw(string("exception in _clInit -> clGetDeviceIDs -> ACCELERATOR"));   	
-	       }
-		}	 	
-    }
-    else{
-		   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ALL, 0, NULL, &deviceListSize);
-		   if(oclHandles.cl_status!=CL_SUCCESS){
-			   throw(string("exception in _clInit -> clGetDeviceIDs -> ALL"));   	
-	       }
-    }
-    
+   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ALL, 0, NULL, &deviceListSize);
+   if(oclHandles.cl_status!=CL_SUCCESS){
+       throw(string("exception in _clInit -> clGetDeviceIDs -> ALL"));   	
+   }
+
    if (deviceListSize == 0)
         throw(string("InitCL()::Error: No devices found."));
-        
+
 #ifdef	DEV_INFO
 	std::cout<<"--cambine: number of device="<<deviceListSize<<std::endl;
 #endif
@@ -375,31 +369,9 @@ void _clInit(string device_type, int device_id)throw(string){
         throw(string("InitCL()::Error: Could not allocate memory."));
 
     // Next, get the device list data 
-	if(device_type.compare("")!=0){
-	   if(device_type.compare("cpu")==0){
-		   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_CPU, deviceListSize, oclHandles.devices, NULL);
-		   if(oclHandles.cl_status!=CL_SUCCESS){
-		   		throw(string("exception in _clInit -> clGetDeviceIDs -> CPU ->2"));   		   	
-	   	   }
-	   }
-   	   if(device_type.compare("gpu")==0){
-		   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_GPU, deviceListSize, oclHandles.devices, NULL);
-		   if(oclHandles.cl_status!=CL_SUCCESS){
-		   	throw(string("exception in _clInit -> clGetDeviceIDs -> GPU -> 2"));   		   	
-	   	   }
-   	 	}
-   	   if(device_type.compare("acc")==0){
-		   oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ACCELERATOR, deviceListSize, oclHandles.devices, NULL);
-		   if(oclHandles.cl_status!=CL_SUCCESS){
-		   	throw(string("exception in _clInit -> clGetDeviceIDs -> ACCELERATOR -> 2"));   		   	
-	   	   }
-   	   }  	 	
-   	}
-   	else{
-	   	 oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ALL, deviceListSize, oclHandles.devices, NULL);
-	   	 if(oclHandles.cl_status!=CL_SUCCESS){
-	   	 	throw(string("exception in _clInit -> clGetDeviceIDs -> ALL -> 2"));   		   	
-   	   	}
+    oclHandles.cl_status = clGetDeviceIDs(targetPlatform, CL_DEVICE_TYPE_ALL, deviceListSize, oclHandles.devices, NULL);
+    if(oclHandles.cl_status!=CL_SUCCESS){
+        throw(string("exception in _clInit -> clGetDeviceIDs -> ALL -> 2"));   		   	
    	}
    if(device_id!=0){
    	if(device_id>(deviceListSize-1))
@@ -435,10 +407,17 @@ void _clInit(string device_type, int device_id)throw(string){
 
    //-----------------------------------------------
    //--cambine-4: Create an OpenCL command queue    
+#ifdef TIMING
+    oclHandles.queue = clCreateCommandQueue(oclHandles.context, 
+                                            oclHandles.devices[DEVICE_ID_INUSED], 
+                                            CL_QUEUE_PROFILING_ENABLE,
+                                            &resultCL);
+#else
     oclHandles.queue = clCreateCommandQueue(oclHandles.context, 
                                             oclHandles.devices[DEVICE_ID_INUSED], 
                                             0, 
                                             &resultCL);
+#endif
 
     if ((resultCL != CL_SUCCESS) || (oclHandles.queue == NULL))
         throw(string("InitCL()::Creating Command Queue. (clCreateCommandQueue)"));
@@ -855,7 +834,8 @@ void _clMemcpyH2D(cl_mem dst, const void *src, int size) throw(string){
 #ifdef PROFILE_
 	double t1 = gettime();
 #endif
-	oclHandles.cl_status = clEnqueueWriteBuffer(oclHandles.queue, dst, CL_TRUE, 0, size, src, 0, NULL, NULL);
+    cl_event event;
+	oclHandles.cl_status = clEnqueueWriteBuffer(oclHandles.queue, dst, CL_TRUE, 0, size, src, 0, NULL, &event);
 #ifdef ERRMSG
 	if(oclHandles.cl_status != CL_SUCCESS){
 		oclHandles.error_str = "excpetion in _clMemcpyH2D -> ";
@@ -892,6 +872,9 @@ void _clMemcpyH2D(cl_mem dst, const void *src, int size) throw(string){
 	double t2 = gettime();
 	H2D += t2 - t1;
 #endif
+#ifdef TIMING
+    h2d_time += probe_event_time(event, oclHandles.queue);
+#endif
 }
 
 /*------------------------------------------------------------
@@ -907,7 +890,8 @@ void _clMemcpyD2H(void * dst, cl_mem src, int size) throw(string){
 #ifdef PROFILE_
 	double t1 = gettime();
 #endif
-	oclHandles.cl_status = clEnqueueReadBuffer(oclHandles.queue, src, CL_TRUE, 0, size, dst, 0,0,0);
+    cl_event event;
+	oclHandles.cl_status = clEnqueueReadBuffer(oclHandles.queue, src, CL_TRUE, 0, size, dst, 0,0,&event);
 #ifdef ERRMSG
 	if(oclHandles.cl_status != CL_SUCCESS){
 		oclHandles.error_str = "excpetion in _clMemCpyD2H -> ";
@@ -943,6 +927,9 @@ void _clMemcpyD2H(void * dst, cl_mem src, int size) throw(string){
 #ifdef PROFILE_
 	double t2 = gettime();
 	D2H += t2 - t1;
+#endif
+#ifdef TIMING
+    d2h_time += probe_event_time(event, oclHandles.queue);
 #endif
 }
 /*------------------------------------------------------------
@@ -1227,6 +1214,9 @@ void _clInvokeKernel(int kernel_id, int work_items, int work_group_size) throw(s
 	double t2 = gettime();
 	KE += t2 - t1;
 #endif
+#ifdef TIMING
+    kernel_time += probe_event_time(e[0], oclHandles.queue);
+#endif
 }
 
 /*------------------------------------------------------------
@@ -1345,6 +1335,9 @@ void _clMemset(cl_mem mem_d, short val, int number_bytes)throw(string){
 #ifdef PROFILE_
 	double t2 = gettime();
 	H2D += t2 - t1;
+#endif
+#ifdef TIMING
+    h2d_time += probe_event_time(e[0], oclHandles.queue);
 #endif
 }
 /*------------------------------------------------------------

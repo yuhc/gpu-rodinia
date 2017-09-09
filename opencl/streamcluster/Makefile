@@ -5,11 +5,13 @@ CC = g++
 
 
 FLAGS = -O3
-SRC = streamcluster.cpp
-EXE = streamcluster
+SRC = streamcluster.cpp ../util/timing.c
+EXE = streamcluster.out
 
 release:$(SRC)
-	$(CC) -lOpenCL  $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB)	$(FLAGS)
+	$(CC) $(SRC) -o $(EXE) \
+		-I$(OPENCL_INC) -L$(OPENCL_LIB)	$(FLAGS) -lOpenCL \
+		-I../util -DTIMING
 
 errmsg:$(SRC)
 	$(CC) -lOpenCL $(SRC) -o $(EXE) -I$(OPENCL_INC) -L$(OPENCL_LIB) -D ERRMSG $(FLAGS)

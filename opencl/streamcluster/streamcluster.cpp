@@ -753,7 +753,7 @@ void outcenterIDs( Points* centers, long* centerIDs, char* outfile ) {
 
   for( int i = 0; i < centers->num; i++ ) {
     if( is_a_median[i] ) {
-      fprintf(fp, "%u\n", centerIDs[i]);
+      fprintf(fp, "%ld\n", centerIDs[i]);
       fprintf(fp, "%lf\n", centers->p[i].weight);
       for( int k = 0; k < centers->dim; k++ ) {
 	fprintf(fp, "%lf ", centers->p[i].coord[k]);
@@ -802,7 +802,7 @@ void streamCluster( PStream* stream,
   while(1) {
 
     size_t numRead  = stream->read(block, dim, chunksize ); 
-    fprintf(stderr,"read %d points\n",numRead);
+    fprintf(stderr,"read %lu points\n",numRead);
 
     if( stream->ferror() || numRead < (unsigned int)chunksize && !stream->feof() ) {
       fprintf(stderr, "error reading data!\n");
@@ -876,7 +876,7 @@ int main(int argc, char **argv)
 #endif
 
   if (argc<11) {
-    fprintf(stderr,"usage: %s k1 k2 d n chunksize clustersize infile outfile nproc\n",
+    fprintf(stderr,"usage: %s k1 k2 d n chunksize clustersize infile outfile nproc [-p platform] [-d device]\n",
 	    argv[0]);
     fprintf(stderr,"  k1:          Min. number of centers allowed\n");
     fprintf(stderr,"  k2:          Max. number of centers allowed\n");
@@ -887,6 +887,8 @@ int main(int argc, char **argv)
     fprintf(stderr,"  infile:      Input file (if n<=0)\n");
     fprintf(stderr,"  outfile:     Output file\n");
     fprintf(stderr,"  nproc:       Number of threads to use\n");
+    fprintf(stderr,"  platform:    Platform id\n");
+    fprintf(stderr,"  device:      Device id\n");
     fprintf(stderr,"\n");
     fprintf(stderr, "if n > 0, points will be randomly generated instead of reading from infile.\n");
     exit(1);
@@ -901,13 +903,23 @@ int main(int argc, char **argv)
   strcpy(outfilename, argv[8]);
   nproc = atoi(argv[9]);
   _clCmdParams(argc, argv);
+
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
   try{
-	  _clInit(device_type, device_id);
+	  _clInit(platform_id, device_id);
    }
    catch(std::string msg){
    	std::cout<<"exception caught in main function->"<<msg<<std::endl;
    	return -1;
    }
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
   srand48(SEED);
   PStream* stream;
   if( n > 0 ) {
@@ -937,11 +949,21 @@ int main(int argc, char **argv)
 #ifdef PROFILE_TMP 
 	gpu_free = gettime();
 #endif
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
+
 	freeDevMem();
 #ifdef PROFILE_TMP
 	gpu_free = gettime() - gpu_free;
 #endif
 	_clRelease();
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 #ifdef ENABLE_PARSEC_HOOKS
   __parsec_roi_end();
 #endif
@@ -953,6 +975,19 @@ int main(int argc, char **argv)
 
   delete stream;
   
+#ifdef  TIMING
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
+
 #ifdef PROFILE_TMP
   printf("time pgain = %lf\n", time_gain);
   printf("time pgain_dist = %lf\n", time_gain_dist);
