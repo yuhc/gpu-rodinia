@@ -47,6 +47,25 @@
 //	MAIN FUNCTION
 //========================================================================================================================================================================================================200
 
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
+
+extern int device_id_inuse;
+extern int platform_id_inuse;
+
 int 
 kernel_gpu_opencl_wrapper(	int xmax,
 							int workload,
@@ -87,6 +106,10 @@ kernel_gpu_opencl_wrapper(	int xmax,
 	// common variables
 	cl_int error;
 
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
+
 	//====================================================================================================100
 	//	GET PLATFORMS (Intel, AMD, NVIDIA, based on provided library), SELECT ONE
 	//====================================================================================================100
@@ -108,7 +131,7 @@ kernel_gpu_opencl_wrapper(	int xmax,
 		fatal_CL(error, __LINE__);
 
 	// Select the 1st platform
-	cl_platform_id platform = platforms[0];
+	cl_platform_id platform = platforms[platform_id_inuse];
 
 	// Get the name of the selected platform and print it (if there are multiple platforms, choose the first one)
 	char pbuf[100];
@@ -133,7 +156,7 @@ kernel_gpu_opencl_wrapper(	int xmax,
 	// Create context for selected platform being GPU
 	cl_context context;
 	context = clCreateContextFromType(	context_properties, 
-										CL_DEVICE_TYPE_GPU, 
+										CL_DEVICE_TYPE_ALL, 
 										NULL, 
 										NULL, 
 										&error);
@@ -166,7 +189,7 @@ kernel_gpu_opencl_wrapper(	int xmax,
 
 	// Select the first device (previousely selected for the context) (if there are multiple devices, choose the first one)
 	cl_device_id device;
-	device = devices[0];
+	device = devices[device_id_inuse];
 
 	// Get the name of the selected device (previousely selected for the context) and print it
 	error = clGetDeviceInfo(device, 
@@ -184,10 +207,18 @@ kernel_gpu_opencl_wrapper(	int xmax,
 
 	// Create a command queue
 	cl_command_queue command_queue;
+#ifdef TIMING
 	command_queue = clCreateCommandQueue(	context, 
 											device, 
-											0, 
+											CL_QUEUE_PROFILING_ENABLE,
 											&error);
+#else
+	command_queue = clCreateCommandQueue(	context, 
+											device, 
+											0,
+											&error);
+#endif
+
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -244,6 +275,11 @@ kernel_gpu_opencl_wrapper(	int xmax,
 	//====================================================================================================100
 
 	// cudaThreadSynchronize();
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	time1 = get_time();
 
@@ -312,6 +348,11 @@ kernel_gpu_opencl_wrapper(	int xmax,
 		fatal_CL(error, __LINE__);
 
 	time2 = get_time();
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	//======================================================================================================================================================150
 	//	EXECUTION
@@ -362,6 +403,9 @@ kernel_gpu_opencl_wrapper(	int xmax,
 	//======================================================================================================================================================150
 	//	FREE GPU MEMORY
 	//======================================================================================================================================================150
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
 
 	// Release kernels...
 	clReleaseKernel(kernel);
@@ -387,6 +431,21 @@ kernel_gpu_opencl_wrapper(	int xmax,
 	clReleaseContext(context);
 
 	time4= get_time();
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n\n", total_time);
+#endif
 
 	//======================================================================================================================================================150
 	//	DISPLAY TIMING

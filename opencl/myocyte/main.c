@@ -120,6 +120,7 @@
 
 #include <stdio.h>											// (in path known to compiler) needed by printf
 #include <stdlib.h>											// (in path known to compiler) meeded by malloc, free
+#include <string.h>
 
 //======================================================================================================================================================150
 //	HEADER
@@ -134,6 +135,9 @@
 //========================================================================================================================================================================================================200
 //	MAIN FUNCTION
 //========================================================================================================================================================================================================200
+
+int device_id_inuse = 0;
+int platform_id_inuse = 0;
 
 int 
 main(	int argc, 
@@ -176,6 +180,20 @@ main(	int argc,
 					return 0;
 				}
 			}
+            else if(strcmp(argv[cur_arg], "-p")==0) {
+				if(argc>=cur_arg+1)
+					if(isInteger(argv[cur_arg+1])==1) {
+						platform_id_inuse = atoi(argv[cur_arg+1]);
+						cur_arg = cur_arg+1;
+					}
+            }
+            else if(strcmp(argv[cur_arg], "-d")==0) {
+				if(argc>=cur_arg+1)
+					if(isInteger(argv[cur_arg+1])==1) {
+						device_id_inuse = atoi(argv[cur_arg+1]);
+						cur_arg = cur_arg+1;
+					}
+		    }
 			// unknown
 			else{
 				printf("ERROR: Unknown argument\n");

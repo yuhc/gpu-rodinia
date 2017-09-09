@@ -1,4 +1,17 @@
 include ../../common/make.config
+
+#Can be changed by `make TYPE=CPU`
+TYPE = GPU
+
+#Library
+ifeq ($(TYPE),GPU)
+	OPENCL_INC = $(NV_OPENCL_INC)
+	OPENCL_LIB = $(NV_OPENCL_LIB)
+else
+	OPENCL_INC = $(INTEL_OPENCL_INC)
+	OPENCL_LIB = $(INTEL_OPENCL_LIB)
+endif
+
 #	COMPILER
 # ======================================================================================================================================================150
 C_C = gcc
@@ -17,17 +30,19 @@ OCL_LIB = -lOpenCL
 			./util/file/file.o \
 			./util/num/num.o \
 			./util/timer/timer.o \
-			./util/opencl/opencl.o
+			./util/opencl/opencl.o \
+			./timing.o
 	$(C_C)	./main.o \
 			./kernel/kernel_gpu_opencl_wrapper.o \
 			./util/file/file.o \
 			./util/num/num.o \
 			./util/timer/timer.o \
 			./util/opencl/opencl.o \
+			./timing.o \
 			-I$(OPENCL_INC) \
 			-lm \
-			-L$(OPENCL_LIB) \
-                        $(OCL_LIB) \
+			-L$(OPENCL_LIB) $(OCL_LIB) \
+			-I../util -DTIMING \
                         -o myocyte.out
 # ========================================================================================================================================================================================================200
 #	OBJECTS (COMPILE SOURCE FILES INTO OBJECTS)
@@ -61,11 +76,15 @@ OCL_LIB = -lOpenCL
 			-c \
 			-o ./kernel/kernel_gpu_opencl_wrapper.o \
 			-I$(OPENCL_INC) \
+			-I../util -DTIMING \
 			-O3
 
 # ======================================================================================================================================================150
 #	UTILITIES
 # ======================================================================================================================================================150
+
+./timing.o: ../util/timing.c
+	$(C_C)  ../util/timing.c -I../util -c -o ./timing.o -O3
 
 ./util/file/file.o:	./common.h \
 					./util/file/file.h \

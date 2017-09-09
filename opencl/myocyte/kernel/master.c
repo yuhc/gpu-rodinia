@@ -34,6 +34,11 @@
 //	MAIN FUNCTION
 //========================================================================================================================================================================================================200
 
+#ifdef TIMING
+#include "timing.h"
+extern float kernel_time, d2h_time, h2d_time;
+#endif
+
 void 
 master(	fp timeinst,
 		fp *initvalu,
@@ -78,6 +83,8 @@ master(	fp timeinst,
 
 	time0 = get_time();
 
+    cl_event write_event[2], kernel_event, read_event[2];
+
 	//======================================================================================================================================================150
 	//	COPY DATA TO GPU MEMORY
 	//======================================================================================================================================================150
@@ -96,7 +103,7 @@ master(	fp timeinst,
 									initvalu,				// source
 									0,						// # of events in the list of events to wait for
 									NULL,					// list of events to wait for
-									NULL);					// ID of this operation to be used by waiting operations
+									&write_event[0]);   	// ID of this operation to be used by waiting operations
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -114,7 +121,7 @@ master(	fp timeinst,
 									parameter,
 									0,
 									NULL,
-									NULL);
+									&write_event[1]);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -176,7 +183,7 @@ master(	fp timeinst,
 									local_work_size, 
 									0, 
 									NULL, 
-									NULL);
+									&kernel_event);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -205,7 +212,7 @@ master(	fp timeinst,
 								finavalu,                    // The pointer to the image on the host.
 								0,                           // Number of events in wait list. Not used.
 								NULL,                        // Event wait list. Not used.
-								NULL);                       // Event object for determining status. Not used.
+								&read_event[0]);             // Event object for determining status. Not used.
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -223,7 +230,7 @@ master(	fp timeinst,
 								com,
 								0,
 								NULL,
-								NULL);
+								&read_event[1]);
 	if (error != CL_SUCCESS) 
 		fatal_CL(error, __LINE__);
 
@@ -277,6 +284,14 @@ master(	fp timeinst,
 			finavalu[i] = 0.0001;												// for INF set rate of change to 0.0001
 		}
 	}
+
+#ifdef TIMING
+    h2d_time += probe_event_time(write_event[0], command_queue);
+    h2d_time += probe_event_time(write_event[1], command_queue);
+    kernel_time += probe_event_time(kernel_event, command_queue);
+    d2h_time += probe_event_time(read_event[0], command_queue);
+    d2h_time += probe_event_time(read_event[1], command_queue);
+#endif
 
 	//======================================================================================================================================================150
 	//	END
