@@ -355,6 +355,9 @@ int main(int argc, char** argv) {
 #endif
     clReleaseEvent(event);
 
+	// Write final output to output file
+    writeoutput(MatrixOut, grid_rows, grid_cols, ofile);
+
 #ifdef  TIMING
 	gettimeofday(&tv_close_start, NULL);
 #endif
@@ -382,8 +385,5 @@ int main(int argc, char** argv) {
 	printf("Total: %f\n", total_time);
 #endif
 
-	// Write final output to output file
-    writeoutput(MatrixOut, grid_rows, grid_cols, ofile);
- 
 	return 0;
 }
