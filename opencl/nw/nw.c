@@ -52,40 +52,69 @@ int blosum62[24][24] = {
 {-4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4, -4,  1}
 };
 
+int platform_id_inuse = 0;            // platform id in use (default: 0)
+int device_id_inuse = 0;              // device id in use (default : 0)
+
+//Primitives for timing
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
 // local variables
 static cl_context	    context;
 static cl_command_queue cmd_queue;
 static cl_device_type   device_type;
 static cl_device_id   * device_list;
-static cl_int           num_devices;
+static cl_uint          num_devices;
+static cl_uint          num_platforms;
 
-static int initialize(int use_gpu)
+static int initialize()
 {
-	cl_int result;
-	size_t size;
-
-	// create OpenCL context
+    // get OpenCL platforms
 	cl_platform_id platform_id;
-	if (clGetPlatformIDs(1, &platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(1,*,0) failed\n"); return -1; }
-	cl_context_properties ctxprop[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0};
-	device_type = use_gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU;
-	context = clCreateContextFromType( ctxprop, device_type, NULL, NULL, NULL );
-	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", use_gpu ? "GPU" : "CPU"); return -1; }
+	if (clGetPlatformIDs(0, NULL, &num_platforms) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(0,0,*) failed\n"); return -1; }
+	cl_platform_id all_platform_id[num_platforms];
+	if (clGetPlatformIDs(num_platforms, all_platform_id, NULL) != CL_SUCCESS) { printf("ERROR: clGetPlatformIDs(*,*,0) failed\n"); return -1; }
+    platform_id = all_platform_id[platform_id_inuse];
 
-	// get the list of GPUs
-	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, 0, NULL, &size );
-	num_devices = (int) (size / sizeof(cl_device_id));
+    // get device
+    if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, 0, NULL, &num_devices) != CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
 	printf("num_devices = %d\n", num_devices);
-	
-	if( result != CL_SUCCESS || num_devices < 1 ) { printf("ERROR: clGetContextInfo() failed\n"); return -1; }
+    if(device_id_inuse > (int)num_devices) {
+        printf("Invalid Device Number\n");
+        return -1;
+    }
 	device_list = new cl_device_id[num_devices];
 	if( !device_list ) { printf("ERROR: new cl_device_id[] failed\n"); return -1; }
-	result = clGetContextInfo( context, CL_CONTEXT_DEVICES, size, device_list, NULL );
-	if( result != CL_SUCCESS ) { printf("ERROR: clGetContextInfo() failed\n"); return -1; }
+    if (clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_ALL, num_devices, device_list, NULL) != CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
 
-	// create command queue for the first device
-	cmd_queue = clCreateCommandQueue( context, device_list[0], 0, NULL );
+    // get device type
+    if (clGetDeviceInfo(device_list[device_id_inuse], CL_DEVICE_TYPE, sizeof(device_type), (void *)&device_type, NULL)!= CL_SUCCESS) { printf("ERROR: clGetDeviceIDs failed\n"); return -1; };
+
+	// create OpenCL context
+	cl_context_properties ctxprop[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform_id, 0};
+	context = clCreateContextFromType( ctxprop, device_type, NULL, NULL, NULL );
+	if( !context ) { printf("ERROR: clCreateContextFromType(%s) failed\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU"); return -1; }
+
+	// create command queue for the specific device
+#ifdef TIMING
+	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, NULL );
+#else
+	cmd_queue = clCreateCommandQueue( context, device_list[device_id_inuse], 0, NULL );
+#endif
 	if( !cmd_queue ) { printf("ERROR: clCreateCommandQueue() failed\n"); return -1; }
+
 	return 0;
 }
 
@@ -123,10 +152,12 @@ int maximum( int a,
 
 void usage(int argc, char **argv)
 {
-	fprintf(stderr, "Usage: %s <max_rows/max_cols> <penalty> \n", argv[0]);
+	fprintf(stderr, "Usage: %s <max_rows/max_cols> <penalty> [-p platform] [-d device]\n", argv[0]);
 	fprintf(stderr, "\t<dimension>  - x and y dimensions\n");
 	fprintf(stderr, "\t<penalty> - penalty(positive integer)\n");
 	fprintf(stderr, "\t<file> - filename\n");
+	fprintf(stderr, "\t[platform] - platform id\n");
+	fprintf(stderr, "\t[device] - device id\n");
 	exit(1);
 }
 
@@ -144,17 +175,33 @@ int main(int argc, char **argv){
 	char * tempchar;
 	// the lengths of the two sequences should be able to divided by 16.
 	// And at current stage  max_rows needs to equal max_cols
-	if (argc == 4)
+	if (argc >= 4)
 	{
 		max_rows = atoi(argv[1]);
 		max_cols = atoi(argv[1]);
 		penalty = atoi(argv[2]);
 		tempchar = argv[3];
+
+        int cur_arg;
+        for (cur_arg = 1; cur_arg<argc; cur_arg++) {
+            if (strcmp(argv[cur_arg], "-p") == 0) {
+                if (argc >= cur_arg + 1) {
+                    platform_id_inuse = atoi(argv[cur_arg+1]);
+                    cur_arg++;
+                }
+            }
+            else if (strcmp(argv[cur_arg], "-d") == 0) {
+                if (argc >= cur_arg + 1) {
+                    device_id_inuse = atoi(argv[cur_arg+1]);
+                    cur_arg++;
+                }
+            }
+        }
 	}
     else{
 	     usage(argc, argv);
     }
-	
+
 	if(atoi(argv[1])%16!=0){
 	fprintf(stderr,"The dimension values must be a multiple of 16\n");
 	exit(1);
@@ -205,14 +252,14 @@ int main(int argc, char **argv){
 	if(!source) { printf("ERROR: calloc(%d) failed\n", sourcesize); return -1; }
 
 	// read the kernel core source
-	char * kernel_nw1  = "nw_kernel1";
-	char * kernel_nw2  = "nw_kernel2";
+	const char * kernel_nw1  = "nw_kernel1";
+	const char * kernel_nw2  = "nw_kernel2";
 	FILE * fp = fopen(tempchar, "rb"); 
 	if(!fp) { printf("ERROR: unable to open '%s'\n", tempchar); return -1; }
 	fread(source + strlen(source), sourcesize, 1, fp);
 	fclose(fp);
 
-	int nworkitems, workgroupsize = 0;
+	size_t nworkitems, workgroupsize = 0;
 	nworkitems = BLOCK_SIZE;
 
 	if(nworkitems < 1 || workgroupsize < 0){
@@ -222,10 +269,12 @@ int main(int argc, char **argv){
 		// set global and local workitems
 	size_t local_work[3] = { (workgroupsize>0)?workgroupsize:1, 1, 1 };
 	size_t global_work[3] = { nworkitems, 1, 1 }; //nworkitems = no. of GPU threads
-	
-	int use_gpu = 1;
+
 	// OpenCL initialization
-	if(initialize(use_gpu)) return -1;
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
+	if(initialize()) return -1;
 
 	// compile kernel
 	cl_int err = 0;
@@ -257,9 +306,13 @@ int main(int argc, char **argv){
 	kernel2 = clCreateKernel(prog, kernel_nw2, &err);  
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateKernel() 0 => %d\n", err); return -1; }
 	clReleaseProgram(prog);
-	
-		
-	
+
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	// creat buffers
 	cl_mem input_itemsets_d;
 	cl_mem output_itemsets_d;
@@ -271,13 +324,19 @@ int main(int argc, char **argv){
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer reference (size:%d) => %d\n", max_cols * max_rows, err); return -1;}
 	output_itemsets_d = clCreateBuffer(context, CL_MEM_READ_WRITE, max_cols * max_rows * sizeof(int), NULL, &err );
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateBuffer output_item_set (size:%d) => %d\n", max_cols * max_rows, err); return -1;}
-	
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	//write buffers
-	err = clEnqueueWriteBuffer(cmd_queue, input_itemsets_d, 1, 0, max_cols * max_rows * sizeof(int), input_itemsets, 0, 0, 0);
+    cl_event event[2];
+	err = clEnqueueWriteBuffer(cmd_queue, input_itemsets_d, 1, 0, max_cols * max_rows * sizeof(int), input_itemsets, 0, 0, &event[0]);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer bufIn1 (size:%d) => %d\n", max_cols * max_rows, err); return -1; }
-	err = clEnqueueWriteBuffer(cmd_queue, reference_d, 1, 0, max_cols * max_rows * sizeof(int), reference, 0, 0, 0);
+	err = clEnqueueWriteBuffer(cmd_queue, reference_d, 1, 0, max_cols * max_rows * sizeof(int), reference, 0, 0, &event[1]);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer bufIn2 (size:%d) => %d\n", max_cols * max_rows, err); return -1; }
-		
+
 	int worksize = max_cols - 1;
 	printf("worksize = %d\n", worksize);
 	//these two parameters are for extension use, don't worry about it.
@@ -309,22 +368,34 @@ int main(int argc, char **argv){
 	clSetKernelArg(kernel2, 11, sizeof(cl_int), (void*) &offset_c);
 	
 	printf("Processing upper-left matrix\n");
+    cl_event kernel_event[worksize/BLOCK_SIZE];
 	for( int blk = 1 ; blk <= worksize/BLOCK_SIZE ; blk++){
 	
 		global_work[0] = BLOCK_SIZE * blk;
 		local_work[0]  = BLOCK_SIZE;
 		clSetKernelArg(kernel1, 7, sizeof(cl_int), (void*) &blk);
-		err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, 0);
+		err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, &kernel_event[blk-1]);
 		if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }			
 	}
 	clFinish(cmd_queue);
-	
+
+#ifdef TIMING
+    h2d_time += probe_event_time(event[0], cmd_queue);
+    h2d_time += probe_event_time(event[1], cmd_queue);
+    clReleaseEvent(event[0]);
+    clReleaseEvent(event[1]);
+	for( int blk = 1 ; blk <= worksize/BLOCK_SIZE ; blk++) {
+        kernel_time += probe_event_time(kernel_event[blk-1], cmd_queue);
+        clReleaseEvent(kernel_event[blk-1]);
+    }
+#endif
+
 	printf("Processing lower-right matrix\n");
 	for( int blk =  worksize/BLOCK_SIZE - 1  ; blk >= 1 ; blk--){	   
 		global_work[0] = BLOCK_SIZE * blk;
 		local_work[0] =  BLOCK_SIZE;
 		clSetKernelArg(kernel2, 7, sizeof(cl_int), (void*) &blk);
-        err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, 0);
+        err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, &kernel_event[blk-1]);
 		if(err != CL_SUCCESS) { printf("ERROR: 2 clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
 	}
     
@@ -333,8 +404,16 @@ int main(int argc, char **argv){
     //	fflush(stdout);
 	//end Lingjie Zhang modification
 
-    err = clEnqueueReadBuffer(cmd_queue, input_itemsets_d, 1, 0, max_cols * max_rows * sizeof(int), output_itemsets, 0, 0, 0);
+    err = clEnqueueReadBuffer(cmd_queue, input_itemsets_d, 1, 0, max_cols * max_rows * sizeof(int), output_itemsets, 0, 0, &event[0]);
 	clFinish(cmd_queue);
+#ifdef TIMING
+	for( int blk = worksize/BLOCK_SIZE -1; blk >= 1; blk--) {
+        kernel_time += probe_event_time(kernel_event[blk-1], cmd_queue);
+        clReleaseEvent(kernel_event[blk-1]);
+    }
+    d2h_time += probe_event_time(event[0], cmd_queue);
+    clReleaseEvent(event[0]);
+#endif
 
 //#define TRACEBACK	
 #ifdef TRACEBACK
@@ -397,6 +476,10 @@ int main(int argc, char **argv){
 
 #endif
 
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
+
 	printf("Computation Done\n");
     // OpenCL shutdown
 	if(shutdown()) return -1;
@@ -405,9 +488,24 @@ int main(int argc, char **argv){
 	clReleaseMemObject(output_itemsets_d);
 	clReleaseMemObject(reference_d);
 
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
+
 	free(reference);
 	free(input_itemsets);
 	free(output_itemsets);
-	
 }
 
