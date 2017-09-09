@@ -30,6 +30,24 @@ int A = 1103515245;
  */
 int C = 12345;
 
+int device_id_inuse = 0;
+int platform_id_inuse = 0;
+
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
 
 //#include "oclUtils.h"
 
@@ -52,7 +70,7 @@ void ocl_print_float_array(cl_command_queue cmd_q, cl_mem array_GPU, size_t size
     printf("PRINTING ARRAY VALUES\n");
     //print values in memory
     for (size_t i = 0; i < size; ++i) {
-        printf("[%d]:%0.6f\n", i, mem[i]);
+        printf("[%lu]:%0.6f\n", i, mem[i]);
     }
     printf("FINISHED PRINTING ARRAY VALUES\n");
 
@@ -71,17 +89,17 @@ static cl_int num_devices;
  * @brief sets up the OpenCL framework by detecting and initializing the available device
  * @param use_gpu flag denoting if the gpu is the desired platform
  */
-static int initialize(int use_gpu) {
+static int initialize() {
     cl_int result;
     size_t size;
 
     // create OpenCL context
     // you have to specify what platform you want to use
     // not uncommon for both NVIDIA and AMD to be installed
-    cl_platform_id platform_id[2];
+    cl_platform_id platform_id[5];
 
     cl_uint num_avail;
-    cl_int err = clGetPlatformIDs(2, platform_id, &num_avail);
+    cl_int err = clGetPlatformIDs(5, platform_id, &num_avail);
     if (err != CL_SUCCESS) {
         if (err == CL_INVALID_VALUE)printf("clGetPlatformIDs() returned invalid_value\n");
         printf("ERROR: clGetPlatformIDs(1,*,0) failed\n");
@@ -89,12 +107,11 @@ static int initialize(int use_gpu) {
     }
     printf("number of available platforms:%d.\n",num_avail);
     char info[100];
-    clGetPlatformInfo(platform_id[0], CL_PLATFORM_VENDOR, 100, info, NULL);
+    clGetPlatformInfo(platform_id[platform_id_inuse], CL_PLATFORM_VENDOR, 100, info, NULL);
     printf("clGetPlatformInfo: %s\n", info);
 
-    cl_context_properties ctxprop[] = {CL_CONTEXT_PLATFORM, (cl_context_properties) platform_id[0], 0};
-    device_type = use_gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU;
-    context = clCreateContextFromType(ctxprop, device_type, NULL, NULL, &err);
+    cl_context_properties ctxprop[] = {CL_CONTEXT_PLATFORM, (cl_context_properties) platform_id[platform_id_inuse], 0};
+    context = clCreateContextFromType(ctxprop, CL_DEVICE_TYPE_ALL, NULL, NULL, &err);
 
     if (!context) {
         if (CL_INVALID_PLATFORM == err)
@@ -113,7 +130,7 @@ static int initialize(int use_gpu) {
             printf("CL_OUT_OF_RESOURCES returned by clCreateContextFromType()\n");
 
 
-        printf("ERROR: clCreateContextFromType(%s) failed\n", use_gpu ? "GPU" : "CPU");
+        printf("ERROR: clCreateContextFromType() failed\n");
         return -1;
     }
 
@@ -136,7 +153,7 @@ static int initialize(int use_gpu) {
         return -1;
     }
     size_t max_work_item_sizes[3];
-    result = clGetDeviceInfo(device_list[0], CL_DEVICE_MAX_WORK_ITEM_SIZES,
+    result = clGetDeviceInfo(device_list[device_id_inuse], CL_DEVICE_MAX_WORK_ITEM_SIZES,
                 sizeof(max_work_item_sizes), (void*)max_work_item_sizes, NULL);
     if (result != CL_SUCCESS) {
         printf("ERROR: clGetDeviceInfo() failed\n");
@@ -146,7 +163,11 @@ static int initialize(int use_gpu) {
     threads_per_block = max_work_item_sizes[0];
 
    // create command queue for the first device
-    cmd_queue = clCreateCommandQueue(context, device_list[0], 0, NULL);
+#ifdef TIMING
+    cmd_queue = clCreateCommandQueue(context, device_list[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, NULL);
+#else
+    cmd_queue = clCreateCommandQueue(context, device_list[device_id_inuse], 0, NULL);
+#endif
     if (!cmd_queue) {
         printf("ERROR: clCreateCommandQueue() failed\n");
         return -1;
@@ -500,7 +521,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     }
 
     // read the kernel core source
-    char * tempchar = "./particle_single.cl";
+    const char * tempchar = "./particle_single.cl";
     FILE * fp = fopen(tempchar, "rb");
     if (!fp) {
         printf("ERROR: unable to open '%s'\n", tempchar);
@@ -510,8 +531,10 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     fclose(fp);
 
     // OpenCL initialization
-    int use_gpu = 1;
-    if (initialize(use_gpu)) return -1;
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
+    if (initialize()) return -1;
 
     // compile kernel
     cl_int err = 0;
@@ -522,7 +545,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         return -1;
     }
 
-    err = clBuildProgram(prog, 1, device_list, "-cl-fast-relaxed-math", NULL, NULL);
+    err = clBuildProgram(prog, 1, &device_list[device_id_inuse], "-cl-fast-relaxed-math", NULL, NULL);
 
     if (err != CL_SUCCESS) {
         if (err == CL_INVALID_PROGRAM)
@@ -553,7 +576,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         static char log[65536];
         memset(log, 0, sizeof (log));
 
-        err = clGetProgramBuildInfo(prog, device_list[0], CL_PROGRAM_BUILD_LOG, sizeof (log) - 1, log, NULL);
+        err = clGetProgramBuildInfo(prog, device_list[device_id_inuse], CL_PROGRAM_BUILD_LOG, sizeof (log) - 1, log, NULL);
         if (err != CL_SUCCESS) {
             printf("ERROR: clGetProgramBuildInfo() => %d\n", err);
         }
@@ -574,10 +597,10 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     //     }
     // }//*/
 
-    char * s_likelihood_kernel = "likelihood_kernel";
-    char * s_sum_kernel = "sum_kernel";
-    char * s_normalize_weights_kernel = "normalize_weights_kernel";
-    char * s_find_index_kernel = "find_index_kernel";
+    const char * s_likelihood_kernel = "likelihood_kernel";
+    const char * s_sum_kernel = "sum_kernel";
+    const char * s_normalize_weights_kernel = "normalize_weights_kernel";
+    const char * s_find_index_kernel = "find_index_kernel";
 
     kernel_likelihood = clCreateKernel(prog, s_likelihood_kernel, &err);
     if (err != CL_SUCCESS) {
@@ -609,6 +632,11 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         printf("ERROR: clCreateKernel(find_index_kernel) 0 => %d\n", err);
         return -1;
     }
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 
     //initial likelihood to 0.0
@@ -639,7 +667,9 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
 
 
     //OpenCL memory allocation
-
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
     arrayX_GPU = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof (float) *Nparticles, NULL, &err);
     if (err != CL_SUCCESS) {
         printf("ERROR: clCreateBuffer arrayX_GPU (size:%d) => %d\n", Nparticles, err);
@@ -705,6 +735,11 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         printf("ERROR: clCreateBuffer partial_sums (size:%d) => %d\n", Nparticles, err);
         return -1;
     }
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
 	//Donnie - this loop is different because in this kernel, arrayX and arrayY
     //  are set equal to xj before every iteration, so effectively, arrayX and
@@ -722,35 +757,41 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     long long send_start = get_time();
 
     //OpenCL memory copy
-    err = clEnqueueWriteBuffer(cmd_queue, I_GPU, 1, 0, sizeof (unsigned char) *IszX * IszY*Nfr, I, 0, 0, 0);
+    cl_event write_event[6];
+    err = clEnqueueWriteBuffer(cmd_queue, I_GPU, 1, 0, sizeof (unsigned char) *IszX * IszY*Nfr, I, 0, 0, &write_event[0]);
     if (err != CL_SUCCESS) {
         printf("ERROR: clEnqueueWriteBuffer I_GPU (size:%d) => %d\n", IszX * IszY*Nfr, err);
         return -1;
     }
-    err = clEnqueueWriteBuffer(cmd_queue, objxy_GPU, 1, 0, 2*sizeof (int) *countOnes, objxy, 0, 0, 0);
+    err = clEnqueueWriteBuffer(cmd_queue, objxy_GPU, 1, 0, 2*sizeof (int) *countOnes, objxy, 0, 0, &write_event[1]);
     if (err != CL_SUCCESS) {
         printf("ERROR: clEnqueueWriteBuffer objxy_GPU (size:%d) => %d\n", countOnes, err);
         return -1; }
-    err = clEnqueueWriteBuffer(cmd_queue, weights_GPU, 1, 0, sizeof (float) *Nparticles, weights, 0, 0, 0);
+    err = clEnqueueWriteBuffer(cmd_queue, weights_GPU, 1, 0, sizeof (float) *Nparticles, weights, 0, 0, &write_event[2]);
     if (err != CL_SUCCESS) {
         printf("ERROR: clEnqueueWriteBuffer weights_GPU (size:%d) => %d\n", Nparticles, err);
         return -1;
     }
-    err = clEnqueueWriteBuffer(cmd_queue, xj_GPU, 1, 0, sizeof (float) *Nparticles, xj, 0, 0, 0);
+    err = clEnqueueWriteBuffer(cmd_queue, xj_GPU, 1, 0, sizeof (float) *Nparticles, xj, 0, 0, &write_event[3]);
     if (err != CL_SUCCESS) {
         printf("ERROR: clEnqueueWriteBuffer arrayX_GPU (size:%d) => %d\n", Nparticles, err);
         return -1;
     }
-    err = clEnqueueWriteBuffer(cmd_queue, yj_GPU, 1, 0, sizeof (float) *Nparticles, yj, 0, 0, 0);
+    err = clEnqueueWriteBuffer(cmd_queue, yj_GPU, 1, 0, sizeof (float) *Nparticles, yj, 0, 0, &write_event[4]);
     if (err != CL_SUCCESS) {
         printf("ERROR: clEnqueueWriteBuffer arrayY_GPU (size:%d) => %d\n", Nparticles, err);
         return -1;
     }
-    err = clEnqueueWriteBuffer(cmd_queue, seed_GPU, 1, 0, sizeof (int) *Nparticles, seed, 0, 0, 0);
+    err = clEnqueueWriteBuffer(cmd_queue, seed_GPU, 1, 0, sizeof (int) *Nparticles, seed, 0, 0, &write_event[5]);
     if (err != CL_SUCCESS) {
         printf("ERROR: clEnqueueWriteBuffer seed_GPU (size:%d) => %d\n", Nparticles, err);
         return -1;
     }
+#ifdef TIMING
+	for( int idx = 0; idx < 6; idx++)
+        h2d_time += probe_event_time(write_event[idx], cmd_queue);
+#endif
+
     /**********************************************************************
      *********** E N D    A L L O C A T E ********************************
      *********************************************************************/
@@ -762,6 +803,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     size_t local_work[3] = {threads_per_block, 1, 1};
     size_t global_work[3] = {num_blocks*threads_per_block, 1, 1};
 
+    cl_event kernel_event[3], read_event[3];
     for (k = 1; k < Nfr; k++) {
         /****************** L I K E L I H O O D ************************************/
         clSetKernelArg(kernel_likelihood, 0, sizeof (void *), (void*) &arrayX_GPU);
@@ -786,7 +828,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         clSetKernelArg(kernel_likelihood, 19, threads_per_block * sizeof (float), NULL);
 
         //KERNEL FUNCTION CALL
-        err = clEnqueueNDRangeKernel(cmd_queue, kernel_likelihood, 1, NULL, global_work, local_work, 0, 0, 0);
+        err = clEnqueueNDRangeKernel(cmd_queue, kernel_likelihood, 1, NULL, global_work, local_work, 0, 0, &kernel_event[0]);
         clFinish(cmd_queue);
         if (err != CL_SUCCESS) {
             printf("ERROR: clEnqueueNDRangeKernel(kernel_likelihood)=>%d failed\n", err);
@@ -799,7 +841,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         clSetKernelArg(kernel_sum, 1, sizeof (cl_int), (void*) &Nparticles);
 
         //KERNEL FUNCTION CALL
-        err = clEnqueueNDRangeKernel(cmd_queue, kernel_sum, 1, NULL, global_work, local_work, 0, 0, 0);
+        err = clEnqueueNDRangeKernel(cmd_queue, kernel_sum, 1, NULL, global_work, local_work, 0, 0, &kernel_event[1]);
         clFinish(cmd_queue);
         if (err != CL_SUCCESS) {
             printf("ERROR: clEnqueueNDRangeKernel(kernel_sum)=>%d failed\n", err);
@@ -818,21 +860,30 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         clSetKernelArg(kernel_normalize_weights, 5, sizeof (void *), (void*) &seed_GPU);
 
         //KERNEL FUNCTION CALL
-        err = clEnqueueNDRangeKernel(cmd_queue, kernel_normalize_weights, 1, NULL, global_work, local_work, 0, 0, 0);
+        err = clEnqueueNDRangeKernel(cmd_queue, kernel_normalize_weights, 1, NULL, global_work, local_work, 0, 0, &kernel_event[2]);
         clFinish(cmd_queue);
         if (err != CL_SUCCESS) {
             printf("ERROR: clEnqueueNDRangeKernel(normalize_weights)=>%d failed\n", err);
 	    //check_error(err, __FILE__, __LINE__);
             return -1;
         }
+#ifdef TIMING
+        for( int idx = 0; idx < 3; idx++)
+            kernel_time += probe_event_time(kernel_event[idx], cmd_queue);
+#endif
+
         /************* E N D    N O R M A L I Z E     W E I G H T S ***********/
 
 	  //	ocl_print_float_array(cmd_queue, partial_sums, 40);
         // /********* I N T E R M E D I A T E     R E S U L T S ***************/
         // //OpenCL memory copying back from GPU to CPU memory
-         err = clEnqueueReadBuffer(cmd_queue, arrayX_GPU, 1, 0, sizeof (float) *Nparticles, arrayX, 0, 0, 0);
-         err = clEnqueueReadBuffer(cmd_queue, arrayY_GPU, 1, 0, sizeof (float) *Nparticles, arrayY, 0, 0, 0);
-         err = clEnqueueReadBuffer(cmd_queue, weights_GPU, 1, 0, sizeof (float) *Nparticles, weights, 0, 0, 0);
+         err = clEnqueueReadBuffer(cmd_queue, arrayX_GPU, 1, 0, sizeof (float) *Nparticles, arrayX, 0, 0, &read_event[0]);
+         err = clEnqueueReadBuffer(cmd_queue, arrayY_GPU, 1, 0, sizeof (float) *Nparticles, arrayY, 0, 0, &read_event[1]);
+         err = clEnqueueReadBuffer(cmd_queue, weights_GPU, 1, 0, sizeof (float) *Nparticles, weights, 0, 0, &read_event[2]);
+#ifdef TIMING
+        for( int idx = 0; idx < 3; idx++)
+            d2h_time += probe_event_time(read_event[idx], cmd_queue);
+#endif
 
          xe = 0;
          ye = 0;
@@ -865,13 +916,17 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
         clSetKernelArg(kernel_find_index, 6, sizeof (void *), (void*) &weights_GPU);
         clSetKernelArg(kernel_find_index, 7, sizeof (cl_int), (void*) &Nparticles);
         //KERNEL FUNCTION CALL
-        err = clEnqueueNDRangeKernel(cmd_queue, kernel_find_index, 1, NULL, global_work, local_work, 0, 0, 0);
+        err = clEnqueueNDRangeKernel(cmd_queue, kernel_find_index, 1, NULL, global_work, local_work, 0, 0, &kernel_event[2]);
         clFinish(cmd_queue);
         if (err != CL_SUCCESS) {
             printf("ERROR: clEnqueueNDRangeKernel(find_index)=>%d failed\n", err);
 	    //check_error(err, __FILE__, __LINE__);
             return -1;
         }
+#ifdef TIMING
+        kernel_time += probe_event_time(kernel_event[2], cmd_queue);
+#endif
+
         /******************* E N D    F I N D    I N D E X ********************/
 
     }//end loop
@@ -880,6 +935,9 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     //clFinish(cmd_queue);
     long long back_time = get_time();
 
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
     //OpenCL freeing of memory
     clReleaseProgram(prog);
     clReleaseMemObject(u_GPU);
@@ -892,27 +950,36 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     clReleaseMemObject(ind_GPU);
     clReleaseMemObject(seed_GPU);
     clReleaseMemObject(partial_sums);
-
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
     long long free_time = get_time();
 
     //OpenCL memory copying back from GPU to CPU memory
-    err = clEnqueueReadBuffer(cmd_queue, arrayX_GPU, 1, 0, sizeof (float) *Nparticles, arrayX, 0, 0, 0);
+    err = clEnqueueReadBuffer(cmd_queue, arrayX_GPU, 1, 0, sizeof (float) *Nparticles, arrayX, 0, 0, &read_event[0]);
     if (err != CL_SUCCESS) {
         printf("ERROR: Memcopy Out\n");
         return -1;
     }
     long long arrayX_time = get_time();
-    err = clEnqueueReadBuffer(cmd_queue, arrayY_GPU, 1, 0, sizeof (float) *Nparticles, arrayY, 0, 0, 0);
+    err = clEnqueueReadBuffer(cmd_queue, arrayY_GPU, 1, 0, sizeof (float) *Nparticles, arrayY, 0, 0, &read_event[1]);
     if (err != CL_SUCCESS) {
         printf("ERROR: Memcopy Out\n");
         return -1;
     }
     long long arrayY_time = get_time();
-    err = clEnqueueReadBuffer(cmd_queue, weights_GPU, 1, 0, sizeof (float) *Nparticles, weights, 0, 0, 0);
+    err = clEnqueueReadBuffer(cmd_queue, weights_GPU, 1, 0, sizeof (float) *Nparticles, weights, 0, 0, &read_event[2]);
     if (err != CL_SUCCESS) {
         printf("ERROR: Memcopy Out\n");
         return -1;
     }
+#ifdef TIMING
+    for( int idx = 0; idx < 3; idx++)
+        d2h_time += probe_event_time(read_event[idx], cmd_queue);
+#endif
+
     long long back_end_time = get_time();
 
     printf("GPU Execution: %lf\n", elapsed_time(send_end, back_time));
@@ -945,9 +1012,27 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
 
 
     //OpenCL freeing of memory
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
     clReleaseMemObject(weights_GPU);
     clReleaseMemObject(arrayY_GPU);
     clReleaseMemObject(arrayX_GPU);
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+	tvsub(&tv_close_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
 
     //free regular memory
     free(likelihood);
@@ -962,9 +1047,9 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
 
 int main(int argc, char * argv[]) {
 
-    char* usage = "float.out -x <dimX> -y <dimY> -z <Nfr> -np <Nparticles>";
+    const char* usage = "float.out -x <dimX> -y <dimY> -z <Nfr> -np <Nparticles> [-p platform] [-d device]";
     //check number of arguments
-    if (argc != 9) {
+    if (argc < 9) {
         printf("%s\n", usage);
         return 0;
     }
@@ -1019,6 +1104,22 @@ int main(int argc, char * argv[]) {
         printf("Number of particles must be > 0\n");
         return 0;
     }
+
+	for (int i = 9; i < argc; ++i) {
+		switch (argv[i][1]) {
+		case 'p':	//--p stands for platform id
+			if (++i < argc)
+				sscanf(argv[i], "%d", &platform_id_inuse);
+		break;
+		case 'd':	 //--d stands for device id
+			if (++i < argc)
+				sscanf(argv[i], "%d", &device_id_inuse);
+		break;
+		default:
+            ;
+		}
+	}
+
     //establish seed
     int * seed = (int *) calloc(Nparticles, sizeof(int));
     int i;

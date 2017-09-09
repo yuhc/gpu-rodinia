@@ -45,7 +45,8 @@ double gettime() {
 }
 #endif
 
-
+int device_id_inuse = 0;
+int platform_id_inuse = 0;
 
 #ifndef FLT_MAX
 #define FLT_MAX 3.40282347e+38
@@ -80,7 +81,7 @@ double * u;
   @brief initializes the OpenCL context and detects available platforms
 @param use_gpu 
 **************************************************/
-static int initialize(int use_gpu) {
+static int initialize() {
     cl_int result;
     size_t size;
 
@@ -91,10 +92,9 @@ static int initialize(int use_gpu) {
         return -1;
     }
     cl_context_properties ctxprop[] = {CL_CONTEXT_PLATFORM, (cl_context_properties) platform_id, 0};
-    device_type = use_gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU;
-    context = clCreateContextFromType(ctxprop, device_type, NULL, NULL, NULL);
+    context = clCreateContextFromType(ctxprop, CL_DEVICE_TYPE_ALL, NULL, NULL, NULL);
     if (!context) {
-        printf("ERROR: clCreateContextFromType(%s) failed\n", use_gpu ? "GPU" : "CPU");
+        printf("ERROR: clCreateContextFromType() failed\n");
         return -1;
     }
 
@@ -118,7 +118,11 @@ static int initialize(int use_gpu) {
     }
 
     // create command queue for the first device
-    cmd_queue = clCreateCommandQueue(context, device_list[0], 0, NULL);
+#ifdef TIMING
+    cmd_queue = clCreateCommandQueue(context, device_list[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, NULL);
+#else
+    cmd_queue = clCreateCommandQueue(context, device_list[device_id_inuse], 0, NULL);
+#endif
     if (!cmd_queue) {
         printf("ERROR: clCreateCommandQueue() failed\n");
         return -1;
@@ -443,7 +447,7 @@ static int allocate(int Nparticles, int countOnes){
 	}
 
 	// read the kernel core source
-	char * tempchar = "./particle_naive.cl";
+	const char * tempchar = "./particle_naive.cl";
 	FILE * fp = fopen(tempchar, "rb");
 	if (!fp) {
 		printf("ERROR: unable to open '%s'\n", tempchar);
@@ -453,8 +457,7 @@ static int allocate(int Nparticles, int countOnes){
 	fclose(fp);
 
 	// OpenCL initialization
-	int use_gpu = 1;
-	if (initialize(use_gpu)) return -1;
+	if (initialize()) return -1;
 
 	// compile kernel
 	cl_int err = 0;
@@ -469,14 +472,14 @@ static int allocate(int Nparticles, int countOnes){
 		static char log[65536];
 		memset(log, 0, sizeof (log));
 		cl_device_id device_id[2] = {0};
-		err = clGetContextInfo(context, CL_CONTEXT_DEVICES, sizeof (device_id), device_id, NULL);
+		err = clGetContextInfo(context, CL_CONTEXT_DEVICES, sizeof (device_id), &device_id[device_id_inuse], NULL);
 		if (err != CL_SUCCESS) {
 			if (err == CL_INVALID_CONTEXT)
 				printf("ERROR: clGetContextInfo() => CL_INVALID_CONTEXT\n");
 			if (err == CL_INVALID_VALUE)
 				printf("ERROR: clGetContextInfo() => CL_INVALID_VALUE\n");
 		}
-		err = clGetProgramBuildInfo(prog, device_id[0], CL_PROGRAM_BUILD_LOG, sizeof (log) - 1, log, NULL);
+		err = clGetProgramBuildInfo(prog, device_id[device_id_inuse], CL_PROGRAM_BUILD_LOG, sizeof (log) - 1, log, NULL);
 		if (err != CL_SUCCESS) {
 			printf("ERROR: clGetProgramBuildInfo() => %d\n", err);
 		}
@@ -487,7 +490,7 @@ static int allocate(int Nparticles, int countOnes){
 		return -1;
 	}
 
-	char * particle_kernel = "particle_kernel";
+	const char * particle_kernel = "particle_kernel";
 
 	kernel_s = clCreateKernel(prog, particle_kernel, &err);
 	if (err != CL_SUCCESS) {
@@ -772,7 +775,7 @@ int particleFilter(int * I, int IszX, int IszY, int Nfr, int * seed, int Npartic
 
 int main(int argc, char * argv[]) {
 
-    char* usage = "naive.out -x <dimX> -y <dimY> -z <Nfr> -np <Nparticles>";
+    const char* usage = "naive.out -x <dimX> -y <dimY> -z <Nfr> -np <Nparticles> [-p platform] [-d device]";
     //check number of arguments
     if (argc != 9) {
         printf("%s\n", usage);
@@ -829,6 +832,22 @@ int main(int argc, char * argv[]) {
         printf("Number of particles must be > 0\n");
         return 0;
     }
+
+	for (int i = 9; i < argc; ++i) {
+		switch (argv[i][1]) {
+		case 'p':	//--p stands for platform id
+			if (++i < argc)
+				sscanf(argv[i], "%d", &platform_id_inuse);
+		break;
+		case 'd':	 //--d stands for device id
+			if (++i < argc)
+				sscanf(argv[i], "%d", &device_id_inuse);
+		break;
+		default:
+            ;
+		}
+	}
+
     //establish seed
     int * seed = (int *) malloc(sizeof (int) *Nparticles);
     int i;
