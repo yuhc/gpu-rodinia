@@ -30,6 +30,24 @@
 #define MAX_SOURCE_SIZE (0x100000)
 #define HISTOGRAM_SIZE (1024 * sizeof(unsigned int))
 
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_init_start, tv_init_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
+int platform_id_inuse = 0; //platform id used (default : 0)
+int device_id_inuse = 0; //deviced id used (default : 0)
+
 ////////////////////////////////////////////////////////////////////////////////
 int compare(const void *a, const void *b) {
 	if(*((float *)a) < *((float *)b)) return -1;
@@ -43,6 +61,34 @@ cl_float4*runMergeSort(int listsize, int divisions,
                                int *sizes, int *nullElements,
                        unsigned int *origOffsets);
 
+//---------------------------------------
+//Read command line parameters
+//
+void clCmdParams(int argc, char* argv[]) {
+	for (int i =0; i < argc; ++i) {
+		switch (argv[i][1]) {
+		  case 'd':	 //--d stands for device id used in computaion
+			if (++i < argc)
+				sscanf(argv[i], "%u", &device_id_inuse);
+			else {
+				printf("Could not read argument after option %s\n", argv[i-1]);
+				exit(0);
+			}
+			break;
+		  case 'p':	 //--p stands for platform id used in computaion
+			if (++i < argc)
+				sscanf(argv[i], "%u", &platform_id_inuse);
+			else {
+				printf("Could not read argument after option %s\n", argv[i-1]);
+				exit(0);
+			}
+			break;
+		default:
+			;
+		}
+	}
+}
+
 int main(int argc, char** argv)
 {
     int err;                            // error code returned from api calls
@@ -53,17 +99,9 @@ int main(int argc, char** argv)
     size_t local;                       // local domain size for our calculation
     unsigned int *results;
 
-    cl_device_id device_id;             // compute device id 
-    cl_context context;                 // compute context
-    cl_command_queue commands;          // compute command queue
-    cl_program program;                 // compute program
-    cl_kernel kernel;                   // compute kernel
-    
-    cl_mem input;                       // device memory used for the input array
-    cl_mem output;                      // device memory used for the output array
-    
     // Fill our data set with random float values
     //
+    clCmdParams(argc, argv);
     
     int numElements = 0 ;
         
@@ -128,7 +166,13 @@ int main(int argc, char** argv)
 
     fclose(tp);
     memcpy(cpu_odata, cpu_idata, mem_size);
+
+    /* bucketsort */
+
     clock_t gpu_start = clock();
+#ifdef  TIMING
+    gettimeofday(&tv_total_start, NULL);
+#endif
     init_bucketsort(numElements);
     int *sizes = (int*) malloc(DIVISIONS * sizeof(int));
     int *nullElements = (int*) malloc(DIVISIONS * sizeof(int));
@@ -136,22 +180,48 @@ int main(int argc, char** argv)
     clock_t bucketsort_start = clock();
     bucketSort(cpu_idata,d_output,numElements,sizes,nullElements,datamin,datamax, origOffsets);
     clock_t bucketsort_diff = clock() - bucketsort_start;
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
     finish_bucketsort();
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
     double bucketTime = getBucketTime();
 
     cl_float4 *d_origList = (cl_float4*) d_output;
     cl_float4 *d_resultList = (cl_float4*) cpu_idata;
-    
+
     int newlistsize = 0;
     for(int i = 0; i < DIVISIONS; i++){
         newlistsize += sizes[i] * 4;
     }
-    
+
+    /* mergesort */
+
+#ifdef  TIMING
+    gettimeofday(&tv_init_start, NULL);
+#endif
     init_mergesort(newlistsize);
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_init_start, &tv);
+	init_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
     clock_t mergesort_start = clock();
     cl_float4 *mergeresult = runMergeSort(newlistsize,DIVISIONS,d_origList,d_resultList,sizes,nullElements,origOffsets);
     clock_t mergesort_diff = clock() - mergesort_start;
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
     finish_mergesort();
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
     gpu_odata = (float*)mergeresult;
 #ifdef TIMER
     clock_t gpu_diff = clock() - gpu_start;
@@ -164,6 +234,21 @@ int main(int argc, char** argv)
     printf("  --Bucketsort execution time: %0.3f ms \n", bucketsort_msec+bucketTime);
     printf("  --Mergesort execution time: %0.3f ms \n", mergesort_msec+mergeTime);
 #endif
+
+#ifdef  TIMING
+	gettimeofday(&tv_total_end, NULL);
+	tvsub(&tv_total_end, &tv_total_start, &tv);
+	total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+
+	printf("Init: %f\n", init_time);
+	printf("MemAlloc: %f\n", mem_alloc_time);
+	printf("HtoD: %f\n", h2d_time);
+	printf("Exec: %f\n", kernel_time);
+	printf("DtoH: %f\n", d2h_time);
+	printf("Close: %f\n", close_time);
+	printf("Total: %f\n", total_time);
+#endif
+
 #ifdef VERIFY
     clock_t cpu_start = clock(), cpu_diff;
     

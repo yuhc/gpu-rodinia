@@ -45,6 +45,24 @@ cl_event mergePassEvent;
 cl_event mergePackEvent;
 double mergesum = 0;
 
+extern int platform_id_inuse;
+extern int device_id_inuse;
+
+#ifdef TIMING
+#include "timing.h"
+
+extern struct timeval tv;
+extern struct timeval tv_total_start, tv_total_end;
+extern struct timeval tv_init_start, tv_init_end;
+extern struct timeval tv_h2d_start, tv_h2d_end;
+extern struct timeval tv_d2h_start, tv_d2h_end;
+extern struct timeval tv_kernel_start, tv_kernel_end;
+extern struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+extern struct timeval tv_close_start, tv_close_end;
+extern float init_time, mem_alloc_time, h2d_time, kernel_time,
+      d2h_time, close_time, total_time;
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // The mergesort algorithm
 ////////////////////////////////////////////////////////////////////////////////
@@ -53,23 +71,23 @@ void init_mergesort(int listsize){
     clGetPlatformIDs(0,NULL,&num);
     cl_platform_id platformID[num];
     clGetPlatformIDs(num,platformID,NULL);
-    clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,0,NULL,&num);
+    clGetDeviceIDs(platformID[platform_id_inuse],CL_DEVICE_TYPE_ALL,0,NULL,&num);
     cl_device_id devices[num];
-    err = clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,num,devices,NULL);
+    err = clGetDeviceIDs(platformID[platform_id_inuse],CL_DEVICE_TYPE_ALL,num,devices,NULL);
     
     if (err != CL_SUCCESS)
     {
-        printf("Error: Failed to create a device group!\n");
+        printf("Error: Failed to create a device group! (Init_mergesort)\n");
         exit(1);
     }
     char name[128];
     
     
-    clGetDeviceInfo(devices[0],CL_DEVICE_NAME,128,name,NULL);
+    clGetDeviceInfo(devices[device_id_inuse],CL_DEVICE_NAME,128,name,NULL);
     
-    mergeContext = clCreateContext(0, 1, &devices[0], NULL, NULL, &err);
+    mergeContext = clCreateContext(0, 1, &devices[device_id_inuse], NULL, NULL, &err);
     
-    mergeCommands = clCreateCommandQueue(mergeContext, devices[0], CL_QUEUE_PROFILING_ENABLE, &err);
+    mergeCommands = clCreateCommandQueue(mergeContext, devices[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, &err);
     
     d_resultList_first_altered = (cl_float4 *)malloc(listsize*sizeof(float));
     d_resultList_first_buff = clCreateBuffer(mergeContext,CL_MEM_READ_WRITE, listsize * sizeof(float),NULL,NULL);
@@ -149,13 +167,14 @@ cl_float4* runMergeSort(int listsize, int divisions,
         exit(1);
     }
     
-    err = clEnqueueWriteBuffer(mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, NULL);
+    cl_event write_event[4], read_event[2];
+    err = clEnqueueWriteBuffer(mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, &write_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to d_resultList_first_buff source array!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(mergeCommands, d_origList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_origList, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(mergeCommands, d_origList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_origList, 0, NULL, &write_event[1]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to d_origList_first_buff source array!\n");
@@ -189,13 +208,24 @@ cl_float4* runMergeSort(int listsize, int divisions,
     }
     clWaitForEvents(1 , &mergeFirstEvent);
     clFinish(mergeCommands);
-    
-    err = clEnqueueReadBuffer( mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, NULL );
+
+    err = clEnqueueReadBuffer( mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, &read_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to read prefix output array! %d\n", err);
         exit(1);
     }
+
+#ifdef TIMING
+    h2d_time += probe_event_time(write_event[0], mergeCommands);
+    h2d_time += probe_event_time(write_event[1], mergeCommands);
+    d2h_time += probe_event_time(read_event[0], mergeCommands);
+    kernel_time += probe_event_time(mergeFirstEvent, mergeCommands);
+#endif
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(write_event[1]);
+    clReleaseEvent(read_event[0]);
+
 //    for(int i = 0; i < listsize/4;i++) {
 //        printf("RESULT %f \n", d_resultList[i].s[0]);
 //        printf("RESULT %f \n", d_resultList[i].s[1]);
@@ -216,16 +246,27 @@ cl_float4* runMergeSort(int listsize, int divisions,
 //        printf("TEST %f \n", d_resultList[i].s[2]);
 //        printf("TEST %f \n", d_resultList[i].s[3]);
 //    }
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
     constStartAddr = clCreateBuffer(mergeContext,CL_MEM_READ_WRITE, (divisions+1)*sizeof(int),NULL,NULL);
-    
-    err = clEnqueueWriteBuffer(mergeCommands, constStartAddr, CL_TRUE, 0, (divisions+1)*sizeof(int), startaddr, 0, NULL, NULL);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
+    err = clEnqueueWriteBuffer(mergeCommands, constStartAddr, CL_TRUE, 0, (divisions+1)*sizeof(int), startaddr, 0, NULL, &write_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to constStartAddr source array!\n");
         exit(1);
     }
-    
-    
+#ifdef TIMING
+    h2d_time += probe_event_time(write_event[0], mergeCommands);
+#endif
+    clReleaseEvent(write_event[0]);
+
     mergePassKernel = clCreateKernel(mergeProgram, "mergeSortPass", &err);
     if (!mergePassKernel || err != CL_SUCCESS)
     {
@@ -262,14 +303,14 @@ cl_float4* runMergeSort(int listsize, int divisions,
 		d_origList = d_resultList;
 		d_resultList = tempList;
       
-        err = clEnqueueWriteBuffer(mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, &write_event[0]);
         if (err != CL_SUCCESS)
         {
             printf("Error: Failed to write to d_resultList_first_buff source array!\n");
             exit(1);
         }
 
-        err = clEnqueueWriteBuffer(mergeCommands, d_origList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_origList, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(mergeCommands, d_origList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_origList, 0, NULL, &write_event[1]);
         if (err != CL_SUCCESS)
         {
             printf("Error: Failed to write to d_origList_first_buff source array!\n");
@@ -296,13 +337,23 @@ cl_float4* runMergeSort(int listsize, int divisions,
         }
         
         clFinish(mergeCommands);
-        err = clEnqueueReadBuffer( mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, NULL );
+        err = clEnqueueReadBuffer( mergeCommands, d_resultList_first_buff, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, &read_event[0]);
         if (err != CL_SUCCESS)
         {
             printf("Error: Failed to read prefix output array! %d\n", err);
             exit(1);
         }
-         clFinish(mergeCommands);
+#ifdef TIMING
+        h2d_time += probe_event_time(write_event[0], mergeCommands);
+        h2d_time += probe_event_time(write_event[1], mergeCommands);
+        d2h_time += probe_event_time(read_event[0], mergeCommands);
+        kernel_time += probe_event_time(mergePassEvent, mergeCommands);
+#endif
+        clReleaseEvent(write_event[0]);
+        clReleaseEvent(write_event[1]);
+        clReleaseEvent(read_event[0]);
+
+        clFinish(mergeCommands);
         clGetEventProfilingInfo(mergePassEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
         clGetEventProfilingInfo(mergePassEvent, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
         total_time = time_end - time_start;
@@ -315,19 +366,25 @@ cl_float4* runMergeSort(int listsize, int divisions,
 		if(threadsPerDiv == 1) break;
 	}
     printf("Merge Pass Kernel Time: %0.3f \n", mergePassTime);
-
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
     finalStartAddr = clCreateBuffer(mergeContext,CL_MEM_READ_WRITE, (divisions+1)*sizeof(int),NULL,NULL);
-    
-    err = clEnqueueWriteBuffer(mergeCommands, finalStartAddr, CL_TRUE, 0, (divisions+1)*sizeof(int), origOffsets, 0, NULL, NULL);
+    nullElems = clCreateBuffer(mergeContext,CL_MEM_READ_WRITE, (divisions)*sizeof(int),NULL,NULL);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
+    err = clEnqueueWriteBuffer(mergeCommands, finalStartAddr, CL_TRUE, 0, (divisions+1)*sizeof(int), origOffsets, 0, NULL, &write_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to finalStartAddr source array!\n");
         exit(1);
     }
     
-    nullElems = clCreateBuffer(mergeContext,CL_MEM_READ_WRITE, (divisions)*sizeof(int),NULL,NULL);
-    
-    err = clEnqueueWriteBuffer(mergeCommands, nullElems, CL_TRUE, 0, (divisions)*sizeof(int), nullElements, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(mergeCommands, nullElems, CL_TRUE, 0, (divisions)*sizeof(int), nullElements, 0, NULL, &write_event[1]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to nullElements source array!\n");
@@ -352,14 +409,14 @@ cl_float4* runMergeSort(int listsize, int divisions,
         printf("Error: Failed to create merge sort pack compute kernel!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(mergeCommands, d_res, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(mergeCommands, d_res, CL_TRUE, 0, listsize*sizeof(float), d_resultList, 0, NULL, &write_event[2]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to d_resultList_first_buff source array!\n");
         exit(1);
     }
     
-    err = clEnqueueWriteBuffer(mergeCommands, d_orig, CL_TRUE, 0, listsize*sizeof(float), d_origList, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(mergeCommands, d_orig, CL_TRUE, 0, listsize*sizeof(float), d_origList, 0, NULL, &write_event[3]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to d_origList_first_buff source array!\n");
@@ -382,6 +439,16 @@ cl_float4* runMergeSort(int listsize, int divisions,
         printf("Error: Failed to execute merge pack kernel!\n");
         exit(1);
     }
+#ifdef TIMING
+    for (int event_id = 0; event_id < 4; event_id++)
+        h2d_time += probe_event_time(write_event[event_id], mergeCommands);
+    kernel_time += probe_event_time(mergePackEvent, mergeCommands);
+#endif
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(write_event[1]);
+    clReleaseEvent(write_event[2]);
+    clReleaseEvent(write_event[3]);
+
     clFinish(mergeCommands);
     clGetEventProfilingInfo(mergePackEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
     clGetEventProfilingInfo(mergePackEvent, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);

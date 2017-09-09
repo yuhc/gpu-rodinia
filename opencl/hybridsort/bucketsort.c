@@ -28,6 +28,21 @@
 #include "bucketsort.h"
 #include <time.h>
 
+#ifdef TIMING
+#include "timing.h"
+
+extern struct timeval tv;
+extern struct timeval tv_total_start, tv_total_end;
+extern struct timeval tv_init_start, tv_init_end;
+extern struct timeval tv_h2d_start, tv_h2d_end;
+extern struct timeval tv_d2h_start, tv_d2h_end;
+extern struct timeval tv_kernel_start, tv_kernel_end;
+extern struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+extern struct timeval tv_close_start, tv_close_end;
+extern float init_time, mem_alloc_time, h2d_time, kernel_time,
+      d2h_time, close_time, total_time;
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // Forward declarations
 ////////////////////////////////////////////////////////////////////////////////
@@ -79,6 +94,9 @@ cl_event bucketPrefixEvent;
 cl_event bucketSortEvent;
 double sum = 0;
 
+extern int platform_id_inuse;
+extern int device_id_inuse;
+
 ////////////////////////////////////////////////////////////////////////////////
 // Initialize the bucketsort algorithm
 ////////////////////////////////////////////////////////////////////////////////
@@ -89,49 +107,26 @@ void init_bucketsort(int listsize)
     cl_platform_id platformID[num];
     clGetPlatformIDs(num, platformID, NULL);
     
-    clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,0,NULL,&num);
+    clGetDeviceIDs(platformID[platform_id_inuse],CL_DEVICE_TYPE_ALL,0,NULL,&num);
     
     cl_device_id devices[num];
-    err = clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,num,devices,NULL);
+    err = clGetDeviceIDs(platformID[platform_id_inuse],CL_DEVICE_TYPE_ALL,num,devices,NULL);
 //    int gpu = 1;
 //    err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 2, &device_id, NULL);
     
     if (err != CL_SUCCESS)
     {
-        printf("Error: Failed to create a device group!\n");
+        printf("Error: Failed to create a device group! (Init_bucketsort)\n");
         exit(1);
     }
+
     char name[128];
-    
-    
-    clGetDeviceInfo(devices[0],CL_DEVICE_NAME,128,name,NULL);
+    clGetDeviceInfo(devices[device_id_inuse],CL_DEVICE_NAME,128,name,NULL);
 
-    
-    bucketContext = clCreateContext(0, 1, &devices[0], NULL, NULL, &err);
+    bucketContext = clCreateContext(0, 1, &devices[device_id_inuse], NULL, NULL, &err);
 
-    bucketCommands = clCreateCommandQueue(bucketContext, devices[0], CL_QUEUE_PROFILING_ENABLE, &err);
+    bucketCommands = clCreateCommandQueue(bucketContext, devices[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, &err);
     
-	h_offsets = (unsigned int *) malloc(DIVISIONS * sizeof(unsigned int));
-    for(int i = 0; i < DIVISIONS; i++){
-        h_offsets[i] = 0;
-    }
-    d_offsets_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, DIVISIONS * sizeof(unsigned int),NULL,NULL);
-	pivotPoints = (float *)malloc(DIVISIONS * sizeof(float));
-    
-    d_indice_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, listsize * sizeof(int),NULL,NULL);
-    d_indice_input_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, listsize * sizeof(int),NULL,NULL);
-    d_indice = (int *)malloc(listsize * sizeof(int));
-	historesult = (float *)malloc(histosize * sizeof(float));
-    l_pivotpoints = (float *)malloc(DIVISIONS*sizeof(float));
-	l_pivotpoints_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, DIVISIONS * sizeof(float), NULL, NULL);
-	l_offsets_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, DIVISIONS * sizeof(unsigned int), NULL, NULL);
-    
-	int blocks = ((listsize - 1) / (BUCKET_THREAD_N * BUCKET_BAND)) + 1;
-	d_prefixoffsets_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), NULL, NULL);
-    d_prefixoffsets = (unsigned int *)malloc(blocks*BUCKET_BLOCK_MEMORY*sizeof(int));
-    d_prefixoffsets_altered = (unsigned int *)malloc(blocks*BUCKET_BLOCK_MEMORY*sizeof(int));
-    d_prefixoffsets_input_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), NULL, NULL);
-    bucketOutput = clCreateBuffer(bucketContext, CL_MEM_READ_WRITE, (listsize + (DIVISIONS*4))*sizeof(float), NULL, NULL);
     FILE *fp;
     const char fileName[]="./bucketsort_kernels.cl";
     size_t source_size;
@@ -166,7 +161,39 @@ void init_bucketsort(int listsize)
         printf("%s\n", buffer);
         exit(1);
     }
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
+	h_offsets = (unsigned int *) malloc(DIVISIONS * sizeof(unsigned int));
+    for(int i = 0; i < DIVISIONS; i++){
+        h_offsets[i] = 0;
+    }
+    d_offsets_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, DIVISIONS * sizeof(unsigned int),NULL,NULL);
+	pivotPoints = (float *)malloc(DIVISIONS * sizeof(float));
     
+    d_indice_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, listsize * sizeof(int),NULL,NULL);
+    d_indice_input_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, listsize * sizeof(int),NULL,NULL);
+    d_indice = (int *)malloc(listsize * sizeof(int));
+	historesult = (float *)malloc(histosize * sizeof(float));
+    l_pivotpoints = (float *)malloc(DIVISIONS*sizeof(float));
+	l_pivotpoints_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, DIVISIONS * sizeof(float), NULL, NULL);
+	l_offsets_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, DIVISIONS * sizeof(unsigned int), NULL, NULL);
+    
+	int blocks = ((listsize - 1) / (BUCKET_THREAD_N * BUCKET_BAND)) + 1;
+	d_prefixoffsets_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), NULL, NULL);
+    d_prefixoffsets = (unsigned int *)malloc(blocks*BUCKET_BLOCK_MEMORY*sizeof(int));
+    d_prefixoffsets_altered = (unsigned int *)malloc(blocks*BUCKET_BLOCK_MEMORY*sizeof(int));
+    d_prefixoffsets_input_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), NULL, NULL);
+    bucketOutput = clCreateBuffer(bucketContext, CL_MEM_READ_WRITE, (listsize + (DIVISIONS*4))*sizeof(float), NULL, NULL);
+
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -199,39 +226,36 @@ void histogramInit(int listsize) {
     cl_platform_id platformID[num];
     clGetPlatformIDs(num, platformID, NULL);
     
-    clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,0,NULL,&num);
+    clGetDeviceIDs(platformID[platform_id_inuse],CL_DEVICE_TYPE_ALL,0,NULL,&num);
     
     char name[128];
-    
-    clGetPlatformInfo(platformID[0], CL_PLATFORM_PROFILE,128,name,NULL);
+    clGetPlatformInfo(platformID[platform_id_inuse], CL_PLATFORM_PROFILE,128,name,NULL);
     
     
     cl_device_id devices[num];
-    err = clGetDeviceIDs(platformID[0],CL_DEVICE_TYPE_GPU,num,devices,NULL);
+    err = clGetDeviceIDs(platformID[platform_id_inuse],CL_DEVICE_TYPE_ALL,num,devices,NULL);
     //    int gpu = 1;
     //    err = clGetDeviceIDs(NULL, gpu ? CL_DEVICE_TYPE_GPU : CL_DEVICE_TYPE_CPU, 2, &device_id, NULL);
     
     if (err != CL_SUCCESS)
     {
-        printf("Error: Failed to create a device group!\n");
+        printf("Error: Failed to create a device group! (HistogramInit)\n");
         exit(1);
     }
     
-    clGetDeviceInfo(devices[0],CL_DEVICE_NAME,128,name,NULL);
+    clGetDeviceInfo(devices[device_id_inuse],CL_DEVICE_NAME,128,name,NULL);
     
     printf("%s \n", name);
     
     cl_context_properties contextProperties[] =
     {
         CL_CONTEXT_PLATFORM,
-        (cl_context_properties)platformID[0],
+        (cl_context_properties)platformID[platform_id_inuse],
         0
     };
     
-    histoContext = clCreateContext(contextProperties, 1, &devices[0], NULL, NULL, &err);
-    histoCommands = clCreateCommandQueue(histoContext, devices[0], CL_QUEUE_PROFILING_ENABLE, &err);
-    histoInput = clCreateBuffer(histoContext,  CL_MEM_READ_ONLY,  listsize*(sizeof(float)), NULL, NULL);
-    histoOutput = clCreateBuffer(histoContext, CL_MEM_READ_WRITE, 1024 * sizeof(unsigned int), NULL, NULL);
+    histoContext = clCreateContext(contextProperties, 1, &devices[device_id_inuse], NULL, NULL, &err);
+    histoCommands = clCreateCommandQueue(histoContext, devices[device_id_inuse], CL_QUEUE_PROFILING_ENABLE, &err);
 
     FILE *fp;
     const char fileName[]="./histogram1024.cl";
@@ -269,23 +293,37 @@ void histogramInit(int listsize) {
         printf("%s\n", buffer);
         exit(1);
     }
-    
+
     histoKernel = clCreateKernel(histoProgram, "histogram1024Kernel", &err);
     if (!histoKernel || err != CL_SUCCESS)
     {
         printf("Error: Failed to create compute kernel!\n");
         exit(1);
     }
-    
+
+#ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_init_start, &tv);
+	init_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+    histoInput = clCreateBuffer(histoContext,  CL_MEM_READ_ONLY,  listsize*(sizeof(float)), NULL, NULL);
+    histoOutput = clCreateBuffer(histoContext, CL_MEM_READ_WRITE, 1024 * sizeof(unsigned int), NULL, NULL);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_init_end, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 }
+
 void histogram1024GPU(unsigned int *h_Result, float *d_Data, float minimum, float maximum,int listsize){
-    err = clEnqueueWriteBuffer(histoCommands, histoInput, CL_TRUE, 0, listsize*sizeof(float), d_Data, 0, NULL, NULL);
+    cl_event write_event[2];
+    err = clEnqueueWriteBuffer(histoCommands, histoInput, CL_TRUE, 0, listsize*sizeof(float), d_Data, 0, NULL, &write_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to source array!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(histoCommands, histoOutput, CL_TRUE, 0, DIVISIONS*sizeof(unsigned int), h_Result, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(histoCommands, histoOutput, CL_TRUE, 0, DIVISIONS*sizeof(unsigned int), h_Result, 0, NULL, &write_event[1]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to source array!\n");
@@ -319,14 +357,27 @@ void histogram1024GPU(unsigned int *h_Result, float *d_Data, float minimum, floa
     }
     clWaitForEvents(1 , &histoEvent);
     clFinish(histoCommands);
-    err = clEnqueueReadBuffer( histoCommands, histoOutput, CL_TRUE, 0, 1024 * sizeof(unsigned int), h_Result, 0, NULL, NULL );
+#ifdef TIMING
+    h2d_time += probe_event_time(write_event[0], histoCommands);
+    h2d_time += probe_event_time(write_event[1], histoCommands);
+    kernel_time += probe_event_time(histoEvent, histoCommands);
+#endif
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(write_event[1]);
+
+    cl_event read_event;
+    err = clEnqueueReadBuffer( histoCommands, histoOutput, CL_TRUE, 0, 1024 * sizeof(unsigned int), h_Result, 0, NULL, &read_event);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to read histo output array! %d\n", err);
         exit(1);
     }
     clFinish(histoCommands);
-    
+#ifdef TIMING
+    d2h_time += probe_event_time(read_event, histoCommands);
+#endif
+    clReleaseEvent(read_event);
+
     cl_ulong time_start, time_end;
     double total_time;
     clGetEventProfilingInfo(histoEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
@@ -355,9 +406,22 @@ void bucketSort(float *d_input, float *d_output, int listsize,
 //	////////////////////////////////////////////////////////////////////////////
 //	// First pass - Create 1024 bin histogram
 //	////////////////////////////////////////////////////////////////////////////
+#ifdef  TIMING
+    gettimeofday(&tv_init_start, NULL);
+#endif
     histogramInit(listsize);
+
 	histogram1024GPU(h_offsets, d_input, minimum, maximum, listsize);
+
+#ifdef  TIMING
+	gettimeofday(&tv_close_start, NULL);
+#endif
     finish_histogram();
+#ifdef  TIMING
+	gettimeofday(&tv_close_end, NULL);
+	tvsub(&tv_close_end, &tv_close_start, &tv);
+	close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
     for(int i=0; i<histosize; i++) historesult[i] = (float)h_offsets[i];
 
 //	///////////////////////////////////////////////////////////////////////////
@@ -370,23 +434,33 @@ void bucketSort(float *d_input, float *d_output, int listsize,
 //	///////////////////////////////////////////////////////////////////////////
 //	// Count the bucket sizes in new divisions
 //	///////////////////////////////////////////////////////////////////////////
-    
+
+    cl_event write_event[4], read_event[2];
+
     bucketcountKernel = clCreateKernel(bucketProgram, "bucketcount", &err);
     if (!bucketcountKernel || err != CL_SUCCESS)
     {
         printf("Error: Failed to create bucketsort compute kernel!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(bucketCommands, l_pivotpoints_buff, CL_TRUE, 0, DIVISIONS*sizeof(float), pivotPoints, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(bucketCommands, l_pivotpoints_buff, CL_TRUE, 0, DIVISIONS*sizeof(float), pivotPoints, 0, NULL, &write_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to l_pivotpoints source array!\n");
         exit(1);
     }
-    
+
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_start, NULL);
+#endif
     d_input_buff = clCreateBuffer(bucketContext,CL_MEM_READ_WRITE, (listsize + (DIVISIONS*4))*sizeof(float),NULL,NULL);
-    
-    err = clEnqueueWriteBuffer(bucketCommands, d_input_buff, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_input, 0, NULL, NULL);
+#ifdef  TIMING
+    gettimeofday(&tv_mem_alloc_end, NULL);
+    tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
+    mem_alloc_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
+    err = clEnqueueWriteBuffer(bucketCommands, d_input_buff, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_input, 0, NULL, &write_event[1]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to d_input_buff source array!\n");
@@ -417,13 +491,13 @@ void bucketSort(float *d_input, float *d_output, int listsize,
     }
     clWaitForEvents(1 , &bucketCountEvent);
     clFinish(bucketCommands);
-    err = clEnqueueReadBuffer( bucketCommands, d_prefixoffsets_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(unsigned int), d_prefixoffsets, 0, NULL, NULL );
+    err = clEnqueueReadBuffer( bucketCommands, d_prefixoffsets_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(unsigned int), d_prefixoffsets, 0, NULL, &read_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to read prefix output array! %d\n", err);
         exit(1);
     }
-    err = clEnqueueReadBuffer( bucketCommands, d_indice_buff, CL_TRUE, 0, listsize * sizeof(int), d_indice, 0, NULL, NULL );
+    err = clEnqueueReadBuffer( bucketCommands, d_indice_buff, CL_TRUE, 0, listsize * sizeof(int), d_indice, 0, NULL, &read_event[1]);
     
     if (err != CL_SUCCESS)
     {
@@ -431,6 +505,18 @@ void bucketSort(float *d_input, float *d_output, int listsize,
         exit(1);
     }
     clFinish(bucketCommands);
+#ifdef TIMING
+    h2d_time += probe_event_time(write_event[0], bucketCommands);
+    h2d_time += probe_event_time(write_event[1], bucketCommands);
+    d2h_time += probe_event_time(read_event[0], bucketCommands);
+    d2h_time += probe_event_time(read_event[1], bucketCommands);
+    kernel_time += probe_event_time(bucketCountEvent, bucketCommands);
+#endif
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(write_event[1]);
+    clReleaseEvent(read_event[0]);
+    clReleaseEvent(read_event[1]);
+
     cl_ulong time_start, time_end;
     double total_time;
     clGetEventProfilingInfo(bucketCountEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
@@ -460,7 +546,7 @@ void bucketSort(float *d_input, float *d_output, int listsize,
     }
 
 
-    err = clEnqueueWriteBuffer(bucketCommands, d_prefixoffsets_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), d_prefixoffsets, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(bucketCommands, d_prefixoffsets_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), d_prefixoffsets, 0, NULL, &write_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to prefix offsets source array!\n");
@@ -483,19 +569,29 @@ void bucketSort(float *d_input, float *d_output, int listsize,
     }
     clWaitForEvents(1 , &bucketPrefixEvent);
     clFinish(bucketCommands);
-    err = clEnqueueReadBuffer( bucketCommands, d_offsets_buff, CL_TRUE, 0, DIVISIONS * sizeof(unsigned int), h_offsets, 0, NULL, NULL );
+    err = clEnqueueReadBuffer( bucketCommands, d_offsets_buff, CL_TRUE, 0, DIVISIONS * sizeof(unsigned int), h_offsets, 0, NULL, &read_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to read d_offsets output array! %d\n", err);
         exit(1);
     }
-    err = clEnqueueReadBuffer( bucketCommands, d_prefixoffsets_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), d_prefixoffsets_altered, 0, NULL, NULL );
+    err = clEnqueueReadBuffer( bucketCommands, d_prefixoffsets_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), d_prefixoffsets_altered, 0, NULL, &read_event[1]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to read d_offsets output array! %d\n", err);
         exit(1);
     }
     clFinish(bucketCommands);
+#ifdef TIMING
+    h2d_time += probe_event_time(write_event[0], bucketCommands);
+    d2h_time += probe_event_time(read_event[0], bucketCommands);
+    d2h_time += probe_event_time(read_event[1], bucketCommands);
+    kernel_time += probe_event_time(bucketPrefixEvent, bucketCommands);
+#endif
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(read_event[0]);
+    clReleaseEvent(read_event[1]);
+
     clGetEventProfilingInfo(bucketPrefixEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
     clGetEventProfilingInfo(bucketPrefixEvent, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
     total_time = time_end - time_start;
@@ -530,31 +626,31 @@ void bucketSort(float *d_input, float *d_output, int listsize,
         exit(1);
     }
 
-    err = clEnqueueWriteBuffer(bucketCommands, l_offsets_buff, CL_TRUE, 0, DIVISIONS * sizeof(unsigned int), h_offsets, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(bucketCommands, l_offsets_buff, CL_TRUE, 0, DIVISIONS * sizeof(unsigned int), h_offsets, 0, NULL, &write_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to  l_offsets source array!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(bucketCommands, d_input_buff, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_input, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(bucketCommands, d_input_buff, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_input, 0, NULL, &write_event[1]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to d_input_buff source array!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(bucketCommands, d_indice_input_buff, CL_TRUE, 0, listsize*sizeof(int), d_indice, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(bucketCommands, d_indice_input_buff, CL_TRUE, 0, listsize*sizeof(int), d_indice, 0, NULL, &write_event[2]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to d_input_buff source array!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(bucketCommands, d_prefixoffsets_input_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), d_prefixoffsets_altered, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(bucketCommands, d_prefixoffsets_input_buff, CL_TRUE, 0, blocks * BUCKET_BLOCK_MEMORY * sizeof(int), d_prefixoffsets_altered, 0, NULL, &write_event[3]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to prefix offsets source array!\n");
         exit(1);
     }
-    err = clEnqueueWriteBuffer(bucketCommands, bucketOutput, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_output, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(bucketCommands, bucketOutput, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_output, 0, NULL, &write_event[4]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to write to source array!\n");
@@ -581,13 +677,25 @@ void bucketSort(float *d_input, float *d_output, int listsize,
     {
         printf("%d Error: Failed to execute bucketsort kernel!\n", err);
     }
-    err = clEnqueueReadBuffer( bucketCommands, bucketOutput, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_output, 0, NULL, NULL );
+    err = clEnqueueReadBuffer( bucketCommands, bucketOutput, CL_TRUE, 0, (listsize + (DIVISIONS*4))*sizeof(float), d_output, 0, NULL, &read_event[0]);
     if (err != CL_SUCCESS)
     {
         printf("Error: Failed to read d_output array! %d\n", err);
     }
      clWaitForEvents(1 , &bucketSortEvent);
     clFinish(bucketCommands);
+#ifdef TIMING
+    for (int event_id = 0; event_id < 4; event_id++)
+        h2d_time += probe_event_time(write_event[event_id], bucketCommands);
+    d2h_time += probe_event_time(read_event[0], bucketCommands);
+    kernel_time += probe_event_time(bucketSortEvent, bucketCommands);
+#endif
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(write_event[1]);
+    clReleaseEvent(write_event[2]);
+    clReleaseEvent(write_event[3]);
+    clReleaseEvent(read_event[0]);
+
     clGetEventProfilingInfo(bucketSortEvent, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
     clGetEventProfilingInfo(bucketSortEvent, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
     total_time = time_end - time_start;
