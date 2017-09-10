@@ -1,1 +1,1 @@
-./nn.out filelist.txt -p 0 -d 0 -r 50 -lat 30 -lng 90 -q -t
+./nn.out filelist.txt -r 50 -lat 30 -lng 90 -q -t -f ~/gpu-rodinia/data -p 0 -d 0

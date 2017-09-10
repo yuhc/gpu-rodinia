@@ -31,4 +31,4 @@ clean:
 	rm -f $(EXE)
 
 run: release
-	./$(EXE) filelist.txt -p 0 -d 0 -r 50 -lat 30 -lng 90 -q -t
+	./$(EXE) filelist.txt -p 0 -d 0 -r 50 -lat 30 -lng 90 -q -t ~/gpu-rodinia/data -p 0 -d 0

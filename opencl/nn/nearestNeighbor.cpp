@@ -18,6 +18,7 @@ struct timeval tv_close_start, tv_close_end;
 float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
       d2h_time = 0, close_time = 0, total_time = 0;
 #endif
+char *data_folder;
 
 cl_context context=NULL;
 
@@ -239,7 +240,7 @@ float *OpenClFindNearestNeighbors(
 int loadData(char *filename,std::vector<Record> &records,std::vector<LatLong> &locations){
     FILE   *flist,*fp;
 	int    i=0;
-	char dbname[64];
+	char dbname[64], db_fullname[128];
 	int recNum=0;
 	
     /**Main processing **/
@@ -255,9 +256,10 @@ int loadData(char *filename,std::vector<Record> &records,std::vector<LatLong> &l
             fprintf(stderr, "error reading filelist\n");
             exit(0);
         }
-        fp = fopen(dbname, "r");
+        sprintf(db_fullname, "%s/%s", data_folder, dbname);
+        fp = fopen(db_fullname, "r");
         if(!fp) {
-            printf("error opening a db\n");
+            printf("error opening a db (%s)\n", db_fullname);
             exit(1);
         }
         // read each record
@@ -356,6 +358,10 @@ int parseCommandline(int argc, char *argv[], char* filename,int *r,float *lat,fl
             case 'd': // device
               i++;
               *d = atoi(argv[i]);
+              break;
+            case 'f': // data folder
+              i++;
+              data_folder = argv[i];
               break;
         }
       }
