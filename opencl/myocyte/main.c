@@ -151,9 +151,10 @@ main(	int argc,
 	int cur_arg;
 	int xmax;
 	int workload = 1;
+    char *data_dir;
 
 	// go through arguments
-	if(argc==3){
+	if(argc>3){
 		for(cur_arg=1; cur_arg<argc; cur_arg++){
 			// check if -time
 			if(strcmp(argv[cur_arg], "-time")==0){
@@ -170,7 +171,7 @@ main(	int argc,
 					}
 					// value is not a number
 					else{
-						printf("ERROR: Value to -time argument in not a number\n");
+						printf("RROR: Value to -time argument in not a number\n");
 						return 0;
 					}
 				}
@@ -194,6 +195,12 @@ main(	int argc,
 						cur_arg = cur_arg+1;
 					}
 		    }
+            else if (strcmp(argv[cur_arg], "-r") == 0) {
+                if (argc >= cur_arg+1) {
+                    data_dir = argv[cur_arg+1];
+                    cur_arg++;
+                }
+            }
 			// unknown
 			else{
 				printf("ERROR: Unknown argument\n");
@@ -264,8 +271,10 @@ main(	int argc,
 		//====================================================================================================100
 
 		// y
+        char y_file[100];
+        sprintf(y_file, "%s/%s", data_dir, "y.txt");
 		for(i=0; i<workload; i++){
-			read_file( "../../data/myocyte/y.txt",
+			read_file( y_file,
 						y[i][0],
 						EQUATIONS,
 						1,
@@ -273,8 +282,10 @@ main(	int argc,
 		}
 
 		// params
+        char params_file[100];
+        sprintf(params_file, "%s/%s", data_dir, "params.txt");
 		for(i=0; i<workload; i++){
-			read_file("../../data/myocyte/params.txt",
+			read_file(params_file,
 						params[i],
 						PARAMETERS,
 						1,

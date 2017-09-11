@@ -1,2 +1,4 @@
-#./dwt2d.out 192.bmp -D 192x192 -f -5 -l 3
-./dwt2d.out rgb.bmp -D 1024x1024 -f -5 -l 3 -p 1 -d 0
+#!/bin/bash
+
+export DATA_DIR=/home/hyu/gpu-rodinia/data/dwt2d
+./dwt2d.out rgb.bmp -i ${DATA_DIR} -D 1024x1024 -f -5 -l 3 -p 0 -d 0

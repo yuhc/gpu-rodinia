@@ -20,7 +20,7 @@ CC_FLAGS = -g -O3 -Wall -I$(MATRIX_DIR) -I$(OPENCL_INC)
 
 
 leukocyte: detect_main.o avilib.o find_ellipse.o find_ellipse_opencl.o track_ellipse.o track_ellipse_opencl.o misc_math.o OpenCL_helper_library.o $(MATRIX_DIR)/meschach.a
-	$(CC) $(CC_FLAGS) -lm avilib.o find_ellipse.o find_ellipse_opencl.o track_ellipse.o track_ellipse_opencl.o misc_math.o OpenCL_helper_library.o detect_main.o -o leukocyte $(MATRIX_DIR)/meschach.a -L$(OPENCL_LIB) -lm -lOpenCL
+	$(CC) $(CC_FLAGS) -lm avilib.o find_ellipse.o find_ellipse_opencl.o track_ellipse.o track_ellipse_opencl.o misc_math.o OpenCL_helper_library.o detect_main.o -o leukocyte.out $(MATRIX_DIR)/meschach.a -L$(OPENCL_LIB) -lm -lOpenCL
 
 %.o: %.[ch]
 	$(CC) $(OUTPUT) $(CC_FLAGS) $< -c
@@ -35,4 +35,4 @@ $(MATRIX_DIR)/meschach.a:
 	cd $(MATRIX_DIR); ./configure --with-all; make all; make clean
 
 clean:
-	rm -f *.o *~ leukocyte
+	rm -f *.o *~ leukocyte.out

@@ -231,17 +231,6 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
 //
 int getImg(char * srcFilename, unsigned char *srcImg, int inputSize)
 {
-    // printf("Loading ipnput: %s\n", srcFilename);
-    char path[] = "../../data/dwt2d/";
-    char *newSrc = NULL;
-    
-    if((newSrc = (char *)malloc(strlen(srcFilename)+strlen(path)+1)) != NULL)
-    {
-        newSrc[0] = '\0';
-        strcat(newSrc, path);
-        strcat(newSrc, srcFilename);
-        srcFilename= newSrc;
-    }
     printf("Loading ipnput: %s\n", srcFilename);
 
     //read image
@@ -271,6 +260,7 @@ void usage() {
   -p, --platform\t\t\tocl platform\n\
   -f, --forward\t\t\tforward transform\n\
   -r, --reverse\t\t\treverse transform\n\
+  -i, --input-dir\t\t\tinput file directory\n\
   -9, --97\t\t\t9/7 transform\n\
   -5, --53\t\t\t5/3 transform\n\
   -w  --write-visual\t\twrite output in visual (tiled) fashion instead of the linear\n");
@@ -946,6 +936,7 @@ int main(int argc, char **argv)
         {"level",       required_argument, 0, 'l'}, //level of dwt
         {"device",      required_argument, 0, 'd'}, //ocl device
         {"platform",    required_argument, 0, 'p'}, //ocl platform
+        {"input-dir",   required_argument, 0, 'i'}, //input file directory
         {"forward",     no_argument,       0, 'f'}, //forward transform
         {"reverse",     no_argument,       0, 'r'}, //forward transform
         {"97",          no_argument,       0, '9'}, //9/7 transform
@@ -962,9 +953,10 @@ int main(int argc, char **argv)
     int forward     = 1; //forward transform
     int dwt97       = 0; //1=dwt9/7, 0=dwt5/3 transform
     int writeVisual = 0; //write output (subbands) in visual (tiled) order instead of linear
+    char input_dir[32] = {"."};
     char * pos;
  
-    while ((ch = getopt_long(argc, argv, "d:p:c:b:l:D:fr95wh", longopts, &optindex)) != -1) 
+    while ((ch = getopt_long(argc, argv, "d:p:c:b:l:i:D:fr95wh", longopts, &optindex)) != -1) 
 	{
         switch (ch) {
         case 'D':
@@ -991,6 +983,9 @@ int main(int argc, char **argv)
             break;
         case 'p':
             platform = atoi(optarg);
+            break;
+        case 'i':
+            strcpy(input_dir, optarg);
             break;
         case 'f':
             forward = 1;
@@ -1113,9 +1108,11 @@ int main(int argc, char **argv)
     } else {
         d->outFilename = strdup(argv[1]);
     }
+    char real_filename[100];
+    sprintf(real_filename, "%s/%s", input_dir, d->srcFilename);
 
     //Input review
-    printf("\nSource file:\t\t%s\n", d->srcFilename);
+    printf("\nSource file:\t\t%s\n", real_filename);
     printf(" Dimensions:\t\t%dx%d\n", pixWidth, pixHeight);
     printf(" Components count:\t%d\n", compCount);
     printf(" Bit depth:\t\t%d\n", bitDepth);
@@ -1128,7 +1125,7 @@ int main(int argc, char **argv)
 
     //load img source image
 	d->srcImg = (unsigned char *) malloc (inputSize);
-	if (getImg(d->srcFilename, d->srcImg, inputSize) == -1) 
+	if (getImg(real_filename, d->srcImg, inputSize) == -1) 
         return -1;
 
 	 // DWT

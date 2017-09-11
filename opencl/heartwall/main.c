@@ -214,7 +214,7 @@ main(	int argc,
 	//	READ DATA FROM FILE
 	//==================================================50
 
-	read_data(	"../../data/heartwall/input.txt",
+	read_data(	input_file_name,
 				common.endoPoints,
 				endoRow,
 				endoCol,
