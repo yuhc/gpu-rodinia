@@ -1,4 +1,6 @@
+#!/bin/bash
+
 #./OCL_particlefilter_naive.out -x 128 -y 128 -z 10 -np 10000
-./OCL_particlefilter_double.out -x 128 -y 128 -z 10 -np 400000 -p 0 -d 0
+./OCL_particlefilter_double.out -x 128 -y 128 -z 10 -np 400000 $@
 #./OCL_particlefilter_single.out -x 128 -y 128 -z 10 -np 400000 -p 1 -d 0
 #cat ./output.txt

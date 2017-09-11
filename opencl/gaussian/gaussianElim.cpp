@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
     
     // args
     char filename[200];
-    int show_data=0,quiet=0,timing=0,platform=-1,device=-1;
+    int show_data=0,quiet=0,timing=0,platform=0,device=0;
     
     // parse command line
     if (parseCommandline(argc, argv, filename,

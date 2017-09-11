@@ -1,4 +1,4 @@
 #!/bin/bash
 
 export DATA_DIR=/home/hyu/Projects/gpu-rodinia/data
-./kmeans.out -o -i ${DATA_DIR}/kmeans/819200.txt $@
+./bfs.out ${DATA_DIR}/bfs/graph1MW_6.txt $@

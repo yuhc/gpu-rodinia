@@ -39,7 +39,7 @@ OCL_particlefilter_single: ex_particle_OCL_single_seq.o timing.o
 	$(CC) $(CC_FLAGS) $< -c
 
 timing.o: ../util/timing.c
-	$(CC) $(CC_FLAGS) -I../util ../util/timing.c -c
+	$(CC) $(CC_FLAGS) $(INCLUDES) ../util/timing.c -c
 
 ex_particle_OCL_naive_seq.o: ex_particle_OCL_naive_seq.cpp
 	$(CC) $(CC_FLAGS) $(INCLUDES) ex_particle_OCL_naive_seq.cpp -c -Wno-unused-result

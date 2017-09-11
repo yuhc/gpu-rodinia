@@ -75,6 +75,7 @@ main.o:	./common.h \
 		./main.c
 	$(C_C)	$(KERNEL_DIM) ./main.c \
 			-c \
+		    -I$(OPENCL_INC) \
 			-o ./main.o \
 			-Wno-unused-result \
 			-O3

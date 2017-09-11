@@ -23,13 +23,13 @@ backprop.out: backprop.o imagenet.o facetrain.o
 	$(CC) $(CC_FLAGS) $< -c
 	
 backprop.o: backprop.c
-	$(CC) $(CC_FLAGS) backprop.c -c -Wno-unused-result
+	$(CC) $(CC_FLAGS) -I$(OPENCL_INC) backprop.c -c -Wno-unused-result
 	
 facetrain.o: facetrain.c
-	$(CC) $(CC_FLAGS) facetrain.c -c
+	$(CC) $(CC_FLAGS) -I$(OPENCL_INC) facetrain.c -c
 
 imagenet.o: imagenet.c
-	$(CC) $(CC_FLAGS) imagenet.c -c
+	$(CC) $(CC_FLAGS) -I$(OPENCL_INC) imagenet.c -c
 
 run: backprop.out
 	./backprop.out -n 4194304 -p 0 -d 0
