@@ -1,3 +1,6 @@
+#!/bin/bash
+
+export DATA_DIR=/home/hyu/Projects/gpu-rodinia/data
 ./hotspot3D.out -n 512 -l 8 -i 500 \
-  -f ../../data/hotspot3D/power_512x8 ../../data/hotspot3D/temp_512x8 output.txt \
-  -p 0 -d 0
+  -f ${DATA_DIR}/hotspot3D/power_512x8 ${DATA_DIR}/hotspot3D/temp_512x8 output.txt \
+  $@
