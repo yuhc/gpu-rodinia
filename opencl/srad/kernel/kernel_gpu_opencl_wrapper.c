@@ -891,12 +891,12 @@ kernel_gpu_opencl_wrapper(	fp* image,											// input image
 	// 	COMPUTATION
 	//======================================================================================================================================================150
 
-	printf("Iterations Progress: ");
+	printf("Iterations Progress: hidden");
 
 	// execute main loop
 	for (iter=0; iter<niter; iter++){										// do for the number of iterations input parameter
 
-		printf("%d ", iter);
+		// printf("%d ", iter);
 		fflush(NULL);
 
 		//====================================================================================================100
