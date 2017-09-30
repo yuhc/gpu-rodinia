@@ -117,7 +117,7 @@ float *OpenClFindNearestNeighbors(
 #endif
 
     cl_command_queue command_queue = cl_getCommandQueue();
-    cl_event writeEvent,kernelEvent,readEvent;
+    cl_event writeEvent,readEvent;
     error = clEnqueueWriteBuffer(command_queue,
                d_locations,
                1, // change to 0 for nonblocking write
@@ -144,12 +144,16 @@ float *OpenClFindNearestNeighbors(
     if (numRecords % 64) globalWorkSize[0] += 64 - (numRecords % 64);
     //printf("Global Work Size: %zu\n",globalWorkSize[0]);      
 
-    error = clEnqueueNDRangeKernel(
-        command_queue,  NN_kernel, 1, 0,
-        globalWorkSize,NULL,
-        0, NULL, &kernelEvent);
+#define NUM_ITERATIONS 100000
+    cl_event kernelEvent[NUM_ITERATIONS];
+    for (int tc = 0; tc < NUM_ITERATIONS; tc++) {
+        error = clEnqueueNDRangeKernel(
+            command_queue,  NN_kernel, 1, 0,
+            globalWorkSize,NULL,
+            0, NULL, &kernelEvent[tc]);
 
-    cl_errChk(error,"ERROR in Executing Kernel NearestNeighbor",true);
+        cl_errChk(error,"ERROR in Executing Kernel NearestNeighbor",true);
+    }
 
     // 5. transfer data off of device
     
@@ -186,16 +190,19 @@ float *OpenClFindNearestNeighbors(
 		h2d_time = (eventEnd - eventStart) / 1e6;
 
         // Kernel
-        error = clGetEventProfilingInfo(kernelEvent,CL_PROFILING_COMMAND_START,
-                                        sizeof(cl_ulong),&eventStart,NULL);
-        cl_errChk(error,"ERROR in Event Profiling (Kernel Start)",true); 
-        error = clGetEventProfilingInfo(kernelEvent,CL_PROFILING_COMMAND_END,
-                                        sizeof(cl_ulong),&eventEnd,NULL);
-        cl_errChk(error,"ERROR in Event Profiling (Kernel End)",true);
+        kernel_time = 0;
+        for (int tc = 0; tc < NUM_ITERATIONS; tc++) {
+            error = clGetEventProfilingInfo(kernelEvent[tc],CL_PROFILING_COMMAND_START,
+                                            sizeof(cl_ulong),&eventStart,NULL);
+            cl_errChk(error,"ERROR in Event Profiling (Kernel Start)",true); 
+            error = clGetEventProfilingInfo(kernelEvent[tc],CL_PROFILING_COMMAND_END,
+                                            sizeof(cl_ulong),&eventEnd,NULL);
+            cl_errChk(error,"ERROR in Event Profiling (Kernel End)",true);
 
-        printf("%f\t",(float)((eventEnd-eventStart)/1e9));
-        totalTime += eventEnd-eventStart;
-		kernel_time = (eventEnd - eventStart) / 1e6;
+            totalTime += eventEnd-eventStart;
+            kernel_time += (eventEnd - eventStart) / 1e6;
+        }
+        printf("%f\t",(float)kernel_time);
 
         // Read Buffer
         error = clGetEventProfilingInfo(readEvent,CL_PROFILING_COMMAND_START,
