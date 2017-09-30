@@ -8,7 +8,7 @@
 
 #ifdef NV //NVIDIA
 	#include <oclUtils.h>
-#else 
+#else
 	#include <CL/cl.h>
 #endif
 
@@ -115,7 +115,7 @@ unsigned int num_blocks = 0;
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
 int
-main( int argc, char** argv) 
+main( int argc, char** argv)
 {
 	setup(argc, argv);
 }
@@ -125,20 +125,20 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 {
 	int in, hid, out;
 	float out_err, hid_err;
-  
+
 	in = net->input_n;
 	hid = net->hidden_n;
-	out = net->output_n;   
-   
+	out = net->output_n;
+
 	int sourcesize = 1024*1024;
-	char * source = (char *)calloc(sourcesize, sizeof(char)); 
+	char * source = (char *)calloc(sourcesize, sizeof(char));
 	if(!source) { printf("ERROR: calloc(%d) failed\n", sourcesize); return -1; }
 
 	// read the kernel core source
 	const char * kernel_bp1  = "bpnn_layerforward_ocl";
 	const char * kernel_bp2  = "bpnn_adjust_weights_ocl";
 	const char * tempchar = "./backprop_kernel.cl";
-	FILE * fp = fopen(tempchar, "rb"); 
+	FILE * fp = fopen(tempchar, "rb");
 	if(!fp) { printf("ERROR: unable to open '%s'\n", tempchar); return -1; }
 	fread(source + strlen(source), sourcesize, 1, fp);
 	fclose(fp);
@@ -162,11 +162,11 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 		//if(err || strstr(log,"warning:") || strstr(log, "error:")) printf("<<<<\n%s\n>>>>\n", log);
 	}
 	if(err != CL_SUCCESS) { printf("ERROR: clBuildProgram() => %d\n", err); return -1; }
-    	
+
 	cl_kernel kernel1;
 	cl_kernel kernel2;
-	kernel1 = clCreateKernel(prog, kernel_bp1, &err);  
-	kernel2 = clCreateKernel(prog, kernel_bp2, &err);  
+	kernel1 = clCreateKernel(prog, kernel_bp1, &err);
+	kernel2 = clCreateKernel(prog, kernel_bp2, &err);
 	if(err != CL_SUCCESS) { printf("ERROR: clCreateKernel() 0 => %d\n", err); return -1; }
 	clReleaseProgram(prog);
 
@@ -182,19 +182,19 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	float * partial_sum;
 	float sum;
 	float num_blocks = in / BLOCK_SIZE;
-	
+
 	input_weights_one_dim = (float *) malloc((in + 1)* (hid + 1) * sizeof(float));
 	input_weights_prev_one_dim = (float *) malloc((in + 1)* (hid + 1) * sizeof(float));
 	partial_sum = (float *) malloc(num_blocks * WIDTH * sizeof(float));
-	
+
 	// set global and local workitems
-	size_t global_work[3] = { BLOCK_SIZE, BLOCK_SIZE * num_blocks, 1 }; 
+	size_t global_work[3] = { BLOCK_SIZE, BLOCK_SIZE * num_blocks, 1 };
 	size_t local_work[3] = { BLOCK_SIZE, BLOCK_SIZE, 1 };
-	
+
 	// this preprocessing stage is temporarily added to correct the bug of wrong memcopy using two-dimensional net->inputweights
 	// todo: fix mem allocation
 	int m = 0;
-	for (int k = 0; k <= in; k++) {	
+	for (int k = 0; k <= in; k++) {
 		for (int j = 0; j <= hid; j++) {
 		input_weights_one_dim[m] = net->input_weights[k][j];
 		input_weights_prev_one_dim[m] = net-> input_prev_weights[k][j];
@@ -232,21 +232,20 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 
 	printf("Performing %s computation\n", device_type == CL_DEVICE_TYPE_GPU ? "GPU" : "CPU");
     cl_event event;
+    cl_event write_event[3];
 
 	//write buffers
-	err = clEnqueueWriteBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, &event);
+	err = clEnqueueWriteBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, &write_event[0]);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_ocl\n"); return -1; }
-#ifdef TIMING
-    h2d_time += probe_event_time(event,cmd_queue);
-#endif
-    clReleaseEvent(event);
 
-	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &event);
+	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &write_event[1]);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_hidden_ocl\n"); return -1; }
 #ifdef TIMING
-    h2d_time += probe_event_time(event,cmd_queue);
+    h2d_time += probe_event_time(write_event[0],cmd_queue);
+    h2d_time += probe_event_time(write_event[1],cmd_queue);
 #endif
-    clReleaseEvent(event);
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(write_event[1]);
 
 	clSetKernelArg(kernel1, 0, sizeof(void *), (void*) &input_ocl);
 	clSetKernelArg(kernel1, 1, sizeof(void *), (void*) &output_hidden_ocl);
@@ -258,14 +257,14 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel1, 7, sizeof(cl_int), (void*) &hid);
 
 	err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, &event);
-	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
+	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
 #ifdef TIMING
     kernel_time += probe_event_time(event,cmd_queue);
 #endif
     clReleaseEvent(event);
 
 	err = clEnqueueReadBuffer(cmd_queue, hidden_partial_sum, 1, 0, num_blocks * WIDTH * sizeof(float), partial_sum, 0, 0, &event);
-	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: partial sum\n"); return -1; }	
+	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: partial sum\n"); return -1; }
 #ifdef TIMING
     d2h_time += probe_event_time(event,cmd_queue);
 #endif
@@ -273,7 +272,7 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 
 	for (int j = 1; j <= hid; j++) {
 		sum = 0.0;
-		for (int k = 0; k < num_blocks; k++) {	
+		for (int k = 0; k < num_blocks; k++) {
 		sum += partial_sum[k * hid + j-1] ;
     }
 		sum += net->input_weights[0][j];
@@ -283,29 +282,25 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 
 	bpnn_layerforward(net->hidden_units, net->output_units, net->hidden_weights, hid, out);
 	bpnn_output_error(net->output_delta, net->target, net->output_units, out, &out_err);
-	bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err);  
+	bpnn_hidden_error(net->hidden_delta, hid, net->output_delta, out, net->hidden_weights, net->hidden_units, &hid_err);
 	bpnn_adjust_weights(net->output_delta, out, net->hidden_units, hid, net->hidden_weights, net->hidden_prev_weights);
 
-	err = clEnqueueWriteBuffer(cmd_queue, hidden_delta_ocl,       1, 0, (hid + 1) * sizeof(float), net->hidden_delta, 0, 0, &event);
+	err = clEnqueueWriteBuffer(cmd_queue, hidden_delta_ocl,       1, 0, (hid + 1) * sizeof(float), net->hidden_delta, 0, 0, &write_event[0]);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer hidden_delta_ocl\n"); return -1; }
-#ifdef TIMING
-    h2d_time += probe_event_time(event,cmd_queue);
-#endif
-    clReleaseEvent(event);
 
-	err = clEnqueueWriteBuffer(cmd_queue, input_prev_weights_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_prev_one_dim, 0, 0, &event);
+	err = clEnqueueWriteBuffer(cmd_queue, input_prev_weights_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_prev_one_dim, 0, 0, &write_event[1]);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_prev_weights_ocl\n"); return -1; }
-#ifdef TIMING
-    h2d_time += probe_event_time(event,cmd_queue);
-#endif
-    clReleaseEvent(event);
 
-	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl,       1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &event);
+	err = clEnqueueWriteBuffer(cmd_queue, input_hidden_ocl,       1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &write_event[2]);
 	if(err != CL_SUCCESS) { printf("ERROR: clEnqueueWriteBuffer input_hidden_ocl\n"); return -1; }
 #ifdef TIMING
-    h2d_time += probe_event_time(event,cmd_queue);
+    h2d_time += probe_event_time(write_event[0],cmd_queue);
+    h2d_time += probe_event_time(write_event[1],cmd_queue);
+    h2d_time += probe_event_time(write_event[2],cmd_queue);
 #endif
-    clReleaseEvent(event);
+    clReleaseEvent(write_event[0]);
+    clReleaseEvent(write_event[1]);
+    clReleaseEvent(write_event[2]);
 
 	clSetKernelArg(kernel2, 0, sizeof(void *), (void*) &hidden_delta_ocl);
 	clSetKernelArg(kernel2, 1, sizeof(cl_int), (void*) &hid);
@@ -315,21 +310,21 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel2, 5, sizeof(void *), (void*) &input_prev_weights_ocl );
 
 	err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, &event);
-	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }	
+	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
 #ifdef TIMING
     kernel_time += probe_event_time(event,cmd_queue);
 #endif
     clReleaseEvent(event);
 
 	err = clEnqueueReadBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, &event);
-	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: input_ocl\n"); return -1; }	
+	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: input_ocl\n"); return -1; }
 #ifdef TIMING
     d2h_time += probe_event_time(event,cmd_queue);
 #endif
     clReleaseEvent(event);
 
 	err = clEnqueueReadBuffer(cmd_queue, input_hidden_ocl, 1, 0, (in + 1) * (hid + 1) * sizeof(float), input_weights_one_dim, 0, 0, &event);
-	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: input_hidden_ocl\n"); return -1; }	
+	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: input_hidden_ocl\n"); return -1; }
 #ifdef TIMING
     d2h_time += probe_event_time(event,cmd_queue);
 #endif
