@@ -1,0 +1,3 @@
+#!/bin/bash
+
+./lud.out -s 8192 $@
