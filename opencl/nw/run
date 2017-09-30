@@ -1,1 +1,3 @@
-./nw.out 32768 10 ./nw.cl -p 0 -d 0
+#!/bin/bash
+
+./nw.out 32768 10 ./nw.cl $@

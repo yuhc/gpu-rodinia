@@ -9,8 +9,4 @@
 #replace euler3d with other CFD programs
 
 
-for i in `seq 1 1`; do
-#  ./euler3d ../../data/cfd/fvcorr.domn.097K -t gpu -d 0
-#  ./euler3d ../../data/cfd/fvcorr.domn.097K 1
-  ./euler3d.out ../../data/cfd/missile.domn.0.2M -p 1 -d 0
-done
+./euler3d.out ../../data/cfd/missile.domn.0.2M $@
