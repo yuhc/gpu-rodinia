@@ -953,7 +953,7 @@ int main(int argc, char **argv)
     int forward     = 1; //forward transform
     int dwt97       = 0; //1=dwt9/7, 0=dwt5/3 transform
     int writeVisual = 0; //write output (subbands) in visual (tiled) order instead of linear
-    char input_dir[32] = {"."};
+    char input_dir[100] = {"."};
     char * pos;
  
     while ((ch = getopt_long(argc, argv, "d:p:c:b:l:i:D:fr95wh", longopts, &optindex)) != -1) 
