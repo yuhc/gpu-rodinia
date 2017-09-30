@@ -32,6 +32,7 @@ OCL_LIB = -lOpenCL
 			./util/timer/timer.o \
 			../util/timing.c \
 			-lm \
+			$(OCL_INC_DIR) \
 			$(OCL_LIB_DIR) \
 			$(OCL_LIB) -o srad.out
 
