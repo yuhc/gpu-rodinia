@@ -1,1 +1,3 @@
-./hybridsort.out r -p 0 -d 0
+#!/bin/bash
+
+./hybridsort.out r $@
