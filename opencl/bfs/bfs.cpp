@@ -119,58 +119,64 @@ throw(std::string)
         mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
 #endif
 
-        _clMemcpyH2D(d_graph_nodes, no_of_nodes*sizeof(Node), h_graph_nodes);
-        _clMemcpyH2D(d_graph_edges, edge_list_size*sizeof(int), h_graph_edges);
-        _clMemcpyH2D(d_graph_mask, no_of_nodes*sizeof(char), h_graph_mask);
-        _clMemcpyH2D(d_updating_graph_mask, no_of_nodes*sizeof(char), h_updating_graph_mask);
-        _clMemcpyH2D(d_graph_visited, no_of_nodes*sizeof(char), h_graph_visited);
-        _clMemcpyH2D(d_cost, no_of_nodes*sizeof(int), h_cost);
-
-        //--2 invoke kernel
 #ifdef	PROFILING
         timer kernel_timer;
         double kernel_time = 0.0;
-        kernel_timer.reset();
-        kernel_timer.start();
 #endif
-        do {
-            h_over = false;
-            _clMemcpyH2D(d_over, sizeof(char), &h_over);
 
-            //--kernel 0
-            int kernel_id = 0;
-            int kernel_idx = 0;
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_nodes);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_edges);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_updating_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_visited);
-            _clSetArgs(kernel_id, kernel_idx++, d_cost);
-            _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
+        _clMemcpyH2D(d_graph_nodes, no_of_nodes*sizeof(Node), h_graph_nodes);
+        _clMemcpyH2D(d_graph_edges, edge_list_size*sizeof(int), h_graph_edges);
 
-            //int work_items = no_of_nodes;
-            _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
+        for (int tc = 0; tc < 200; tc++) {
+            _clMemcpyH2D(d_graph_mask, no_of_nodes*sizeof(char), h_graph_mask);
+            _clMemcpyH2D(d_updating_graph_mask, no_of_nodes*sizeof(char), h_updating_graph_mask);
+            _clMemcpyH2D(d_graph_visited, no_of_nodes*sizeof(char), h_graph_visited);
+            _clMemcpyH2D(d_cost, no_of_nodes*sizeof(int), h_cost);
 
-            //--kernel 1
-            kernel_id = 1;
-            kernel_idx = 0;
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_updating_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_visited);
-            _clSetArgs(kernel_id, kernel_idx++, d_over);
-            _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
-
-            //work_items = no_of_nodes;
-            _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
-
-            _clMemcpyD2H(d_over,sizeof(char), &h_over);
-        } while(h_over);
-
-        _clFinish();
+        //--2 invoke kernel
 #ifdef	PROFILING
-        kernel_timer.stop();
-        kernel_time = kernel_timer.getTimeInSeconds();
+            kernel_timer.reset();
+            kernel_timer.start();
 #endif
+            do {
+                h_over = false;
+                _clMemcpyH2D(d_over, sizeof(char), &h_over);
+
+                //--kernel 0
+                int kernel_id = 0;
+                int kernel_idx = 0;
+                _clSetArgs(kernel_id, kernel_idx++, d_graph_nodes);
+                _clSetArgs(kernel_id, kernel_idx++, d_graph_edges);
+                _clSetArgs(kernel_id, kernel_idx++, d_graph_mask);
+                _clSetArgs(kernel_id, kernel_idx++, d_updating_graph_mask);
+                _clSetArgs(kernel_id, kernel_idx++, d_graph_visited);
+                _clSetArgs(kernel_id, kernel_idx++, d_cost);
+                _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
+
+                //int work_items = no_of_nodes;
+                _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
+
+                //--kernel 1
+                kernel_id = 1;
+                kernel_idx = 0;
+                _clSetArgs(kernel_id, kernel_idx++, d_graph_mask);
+                _clSetArgs(kernel_id, kernel_idx++, d_updating_graph_mask);
+                _clSetArgs(kernel_id, kernel_idx++, d_graph_visited);
+                _clSetArgs(kernel_id, kernel_idx++, d_over);
+                _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
+
+                //work_items = no_of_nodes;
+                _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
+
+                _clMemcpyD2H(d_over,sizeof(char), &h_over);
+            } while(h_over);
+
+            _clFinish();
+#ifdef	PROFILING
+            kernel_timer.stop();
+            kernel_time += kernel_timer.getTimeInSeconds();
+#endif
+        }
 
         //--3 transfer data from device to host
         _clMemcpyD2H(d_cost,no_of_nodes*sizeof(int), h_cost);
