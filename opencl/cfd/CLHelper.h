@@ -1237,6 +1237,7 @@ void _clInvokeKernel(int kernel_id, int work_items, int work_group_size) throw(s
 	  work_items = work_items + (work_group_size-(work_items%work_group_size));
   	size_t local_work_size[] = {work_group_size, 1};
 	size_t global_work_size[] = {work_items, 1};
+    for (int tc = 0; tc < 3; tc++) {
 	oclHandles.cl_status = clEnqueueNDRangeKernel(oclHandles.queue, oclHandles.kernel[kernel_id], work_dim, 0, \
 											global_work_size, local_work_size, 0 , 0, &(e[0]) );	
 	#ifdef ERRMSG
@@ -1331,6 +1332,7 @@ void _clInvokeKernel(int kernel_id, int work_items, int work_group_size) throw(s
 #ifdef TIMING
     kernel_time += probe_event_time(e[0], oclHandles.queue);
 #endif
+    }
 }
 
 /*------------------------------------------------------------
