@@ -249,7 +249,7 @@ int main(int argc, char** argv)
 	                    NULL,                     // Event wait list. Not used.
 	                    &event);                  // Event object for determining status. Not used.
 #ifdef TIMING
-    kernel_time += probe_event_time(event,cl.q());
+    d2h_time += probe_event_time(event,cl.q());
 #endif
     clReleaseEvent(event);
 

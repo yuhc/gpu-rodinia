@@ -65,6 +65,7 @@ cl_command_queue OpenCL::q()
 
 void OpenCL::launch(string toLaunch)
 {
+	cl_event event;
 	// Launch the kernel (or at least enqueue it).
 	ret = clEnqueueNDRangeKernel(command_queue, 
 	                             kernelArray[toLaunch],
@@ -74,13 +75,14 @@ void OpenCL::launch(string toLaunch)
 	                             &lwsize,
 	                             0, 
 	                             NULL, 
-	                             NULL);
+	                             &event);
 	
 	if (ret != CL_SUCCESS)
 	{
 		printf("\nError attempting to launch %s. Error in clCreateProgramWithSource with error code %i\n\n", toLaunch.c_str(), ret);
 		exit(1);
 	}
+    kernel_time += probe_event_time(event, command_queue);
 }
 
 void OpenCL::gwSize(size_t theSize)
