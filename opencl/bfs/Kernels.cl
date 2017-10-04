@@ -12,9 +12,9 @@ typedef struct{
 //--7 parameters
 __kernel void BFS_1( const __global Node* g_graph_nodes,
 					const __global int* g_graph_edges, 
-					__global char* g_graph_mask, 
-					__global char* g_updating_graph_mask, 
-					__global char* g_graph_visited, 
+					__global int* g_graph_mask, 
+					__global int* g_updating_graph_mask, 
+					__global int* g_graph_visited, 
 					__global int* g_cost, 
 					const  int no_of_nodes){
 	int tid = get_global_id(0);
@@ -31,10 +31,10 @@ __kernel void BFS_1( const __global Node* g_graph_nodes,
 }
 
 //--5 parameters
-__kernel void BFS_2(__global char* g_graph_mask, 
-					__global char* g_updating_graph_mask, 
-					__global char* g_graph_visited, 
-					__global char* g_over,
+__kernel void BFS_2(__global int* g_graph_mask, 
+					__global int* g_updating_graph_mask, 
+					__global int* g_graph_visited, 
+					__global int* g_over,
 					const  int no_of_nodes
 					) {
 	int tid = get_global_id(0);

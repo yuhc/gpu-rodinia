@@ -58,6 +58,7 @@ void compare_results(const datatype *cpu_results, const datatype *gpu_results, c
       if (cpu_results[i]!=gpu_results[i]){
          passed = false; 
       }
+      cout << i << "CPU: " << cpu_results[i] << "GPU: " << gpu_results[i] << endl;
     }
     if (passed){
         std::cout << "--cambine:passed:-)" << endl;
