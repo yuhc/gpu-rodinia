@@ -256,14 +256,12 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel1, 6, sizeof(cl_int), (void*) &in);
 	clSetKernelArg(kernel1, 7, sizeof(cl_int), (void*) &hid);
 
-    for (int tc = 0; tc < 30; tc++) {
-        err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, &event);
-        if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
+    err = clEnqueueNDRangeKernel(cmd_queue, kernel1, 2, NULL, global_work, local_work, 0, 0, &event);
+    if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
 #ifdef TIMING
-        kernel_time += probe_event_time(event,cmd_queue);
+    kernel_time += probe_event_time(event,cmd_queue);
 #endif
-        clReleaseEvent(event);
-    }
+    clReleaseEvent(event);
 
 	err = clEnqueueReadBuffer(cmd_queue, hidden_partial_sum, 1, 0, num_blocks * WIDTH * sizeof(float), partial_sum, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: partial sum\n"); return -1; }
@@ -311,14 +309,12 @@ int bpnn_train_kernel(BPNN *net, float *eo, float *eh)
 	clSetKernelArg(kernel2, 4, sizeof(void *), (void*) &input_hidden_ocl);
 	clSetKernelArg(kernel2, 5, sizeof(void *), (void*) &input_prev_weights_ocl );
 
-    for (int tc = 0; tc < 30; tc++) {
-        err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, &event);
-        if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
+    err = clEnqueueNDRangeKernel(cmd_queue, kernel2, 2, NULL, global_work, local_work, 0, 0, &event);
+    if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueNDRangeKernel()=>%d failed\n", err); return -1; }
 #ifdef TIMING
-        kernel_time += probe_event_time(event,cmd_queue);
+    kernel_time += probe_event_time(event,cmd_queue);
 #endif
-        clReleaseEvent(event);
-    }
+    clReleaseEvent(event);
 
 	err = clEnqueueReadBuffer(cmd_queue, input_ocl, 1, 0, (in + 1) * sizeof(float), net->input_units, 0, 0, &event);
 	if(err != CL_SUCCESS) { printf("ERROR: 1  clEnqueueReadBuffer: input_ocl\n"); return -1; }
