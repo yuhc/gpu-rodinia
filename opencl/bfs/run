@@ -1,4 +1,5 @@
 #!/bin/bash
 
-export DATA_DIR=/home/hyu/Projects/gpu-rodinia/data
-./bfs.out ${DATA_DIR}/bfs/graph1MW_6.txt $@
+export DATA_DIR=/home/hyu/gpu-rodinia/data
+#./bfs.out ${DATA_DIR}/bfs/graph1MW_6.txt $@
+./bfs.out ${DATA_DIR}/bfs/graph65536.txt $@
