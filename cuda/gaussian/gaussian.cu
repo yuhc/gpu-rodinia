@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
         exit(0);
     }
     
-    //PrintDeviceProperties();
+    PrintDeviceProperties();
     //char filename[100];
     //sprintf(filename,"matrices/matrix%d.txt",size);
 
