@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./srad.out -n 2500 -l 0.5 -s 502 458 $@
+./srad.out -n 200 -l 0.5 -s 502 458 $@
