@@ -151,7 +151,7 @@ float* OpenClFindNearestNeighbors(cl_context context, int numRecords,
         globalWorkSize[0] += 64 - (numRecords % 64);
 // printf("Global Work Size: %zu\n",globalWorkSize[0]);
 
-#define NUM_ITERATIONS 10000
+#define NUM_ITERATIONS 1000
     cl_event kernelEvent[NUM_ITERATIONS];
     for (int tc = 0; tc < NUM_ITERATIONS; tc++) {
         error = clEnqueueNDRangeKernel(command_queue, NN_kernel, 1, 0,
