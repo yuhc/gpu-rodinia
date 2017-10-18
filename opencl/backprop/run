@@ -1,3 +1,4 @@
 #!/bin/bash
 
-./backprop.out -n 2097152 $@
+./backprop.out -n 524288 $@
+#./backprop.out -n 2097152 $@
