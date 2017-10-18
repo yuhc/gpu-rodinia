@@ -127,7 +127,6 @@ throw(std::string)
         _clMemcpyH2D(d_graph_nodes, no_of_nodes*sizeof(Node), h_graph_nodes);
         _clMemcpyH2D(d_graph_edges, edge_list_size*sizeof(int), h_graph_edges);
 
-        for (int tc = 0; tc < 200; tc++) {
             _clMemcpyH2D(d_graph_mask, no_of_nodes*sizeof(char), h_graph_mask);
             _clMemcpyH2D(d_updating_graph_mask, no_of_nodes*sizeof(char), h_updating_graph_mask);
             _clMemcpyH2D(d_graph_visited, no_of_nodes*sizeof(char), h_graph_visited);
@@ -176,7 +175,6 @@ throw(std::string)
             kernel_timer.stop();
             kernel_time += kernel_timer.getTimeInSeconds();
 #endif
-        }
 
         //--3 transfer data from device to host
         _clMemcpyD2H(d_cost,no_of_nodes*sizeof(int), h_cost);

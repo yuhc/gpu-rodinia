@@ -142,8 +142,8 @@ int main(int argc, char** argv)
 	
 	// Pyramid parameters.
 	int borderCols = (pyramid_height) * HALO;
-	// int smallBlockCol = ?????? - (pyramid_height) * HALO * 2;
-	// int blockCols = cols / smallBlockCol + ((cols % smallBlockCol == 0) ? 0 : 1);
+//	int smallBlockCol = 256 - (pyramid_height) * HALO * 2;
+//	int blockCols = cols / smallBlockCol + ((cols % smallBlockCol == 0) ? 0 : 1);
 
 	
 	/* printf("pyramidHeight: %d\ngridSize: [%d]\nborder:[%d]\nblockSize: %d\nblockGrid:[%d]\ntargetBlock:[%d]\n",

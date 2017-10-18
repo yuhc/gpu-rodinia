@@ -115,6 +115,7 @@ void OpenCL::createKernel(string kernelName)
 	
 	// Local work size must divide evenly into global work size.
 	size_t howManyThreads = lwsize;
+	if (howManyThreads > 256) howManyThreads = 256;
 	if (lwsize > gwsize)
 	{
 		lwsize = gwsize;

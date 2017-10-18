@@ -13,7 +13,7 @@
 #elif defined(RD_WG_SIZE)
         #define BLOCK_SIZE_0 RD_WG_SIZE
 #else
-        #define BLOCK_SIZE_0 0
+        #define BLOCK_SIZE_0 4
 #endif
 
 //2D defines. Go from specific to general
