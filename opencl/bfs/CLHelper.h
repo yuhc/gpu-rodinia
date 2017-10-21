@@ -438,7 +438,7 @@ cl_mem _clCreateAndCpyMem(int size, void * h_mem_source) throw(string)
 cl_mem _clMallocRW(int size, void * h_mem_ptr) throw(string)
 {
     cl_mem d_mem;
-    d_mem = clCreateBuffer(oclHandles.context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, size, h_mem_ptr, &oclHandles.cl_status);
+    d_mem = clCreateBuffer(oclHandles.context, CL_MEM_READ_WRITE, size, NULL, &oclHandles.cl_status);
 #ifdef ERRMSG
     if(oclHandles.cl_status != CL_SUCCESS)
         throw(string("excpetion in _clMallocRW"));
@@ -451,7 +451,7 @@ cl_mem _clMallocRW(int size, void * h_mem_ptr) throw(string)
 cl_mem _clMalloc(int size, void * h_mem_ptr) throw(string)
 {
     cl_mem d_mem;
-    d_mem = clCreateBuffer(oclHandles.context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, size, h_mem_ptr, &oclHandles.cl_status);
+    d_mem = clCreateBuffer(oclHandles.context, CL_MEM_WRITE_ONLY, size, NULL, &oclHandles.cl_status);
 #ifdef ERRMSG
     if(oclHandles.cl_status != CL_SUCCESS)
         throw(string("excpetion in _clMalloc"));
