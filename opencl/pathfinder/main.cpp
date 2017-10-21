@@ -158,11 +158,6 @@ int main(int argc, char** argv)
     gettimeofday(&tv_total_start, NULL);
 #endif
 	cl.init();    // 1 means to use GPU. 0 means use CPU.
-#ifdef  TIMING
-	gettimeofday(&tv_init_end, NULL);
-	tvsub(&tv_init_end, &tv_total_start, &tv);
-	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-#endif
 
 	cl.gwSize(rows * cols);
 
@@ -171,43 +166,54 @@ int main(int argc, char** argv)
 	cl.createKernel(kn);
 
 #ifdef  TIMING
+	gettimeofday(&tv_init_end, NULL);
+	tvsub(&tv_init_end, &tv_total_start, &tv);
+	init_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
+    cl_int* h_outputBuffer = (cl_int*)malloc(16384 * sizeof(cl_int));
+    for (int i = 0; i < 16384; i++) {
+        h_outputBuffer[i] = 0;
+	}
+
+#ifdef  TIMING
     gettimeofday(&tv_mem_alloc_start, NULL);
 #endif
 	// Allocate device memory.
-	cl_mem d_gpuWall = clCreateBuffer(cl.ctxt(),
-	                                  CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR,
-	                                  sizeof(cl_int)*(size-cols),
-	                                  (data + cols),
-	                                  NULL);
+    cl_mem d_gpuWall = clCreateBuffer(cl.ctxt(), CL_MEM_READ_ONLY,
+        sizeof(cl_int) * (size - cols), NULL, NULL);
 
-	cl_mem d_gpuResult[2];
+    cl_mem d_gpuResult[2];
 
-	d_gpuResult[0] = clCreateBuffer(cl.ctxt(),
-	                                CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-	                                sizeof(cl_int)*cols,
-	                                data,
-	                                NULL);
+    d_gpuResult[0] = clCreateBuffer(cl.ctxt(), CL_MEM_READ_WRITE,
+        sizeof(cl_int) * cols, NULL, NULL);
 
-	d_gpuResult[1] = clCreateBuffer(cl.ctxt(),
-	                                CL_MEM_READ_WRITE,
-	                                sizeof(cl_int)*cols,
-	                                NULL,
-	                                NULL);
+    d_gpuResult[1] = clCreateBuffer(cl.ctxt(), CL_MEM_READ_WRITE,
+        sizeof(cl_int) * cols, NULL, NULL);
 
-	cl_int* h_outputBuffer = (cl_int*)malloc(16384*sizeof(cl_int));
-	for (int i = 0; i < 16384; i++)
-	{
-		h_outputBuffer[i] = 0;
-	}
-	cl_mem d_outputBuffer = clCreateBuffer(cl.ctxt(),
-	                                       CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR,
-	                                       sizeof(cl_int)*16384,
-	                                       h_outputBuffer,
-	                                       NULL);
+    cl_mem d_outputBuffer = clCreateBuffer(cl.ctxt(),
+        CL_MEM_READ_WRITE, sizeof(cl_int) * 16384, NULL, NULL);
+
 #ifdef  TIMING
     gettimeofday(&tv_mem_alloc_end, NULL);
     tvsub(&tv_mem_alloc_end, &tv_mem_alloc_start, &tv);
     mem_alloc_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
+    cl_event write_event[3];
+    clEnqueueWriteBuffer(cl.q(), d_gpuWall, 1, 0,
+        sizeof(cl_int) * (size - cols), (data + cols), 0, 0, &write_event[0]);
+
+    clEnqueueWriteBuffer(cl.q(), d_gpuResult[0], 1, 0,
+        sizeof(cl_int) * cols, data, 0, 0, &write_event[1]);
+
+    clEnqueueWriteBuffer(cl.q(), d_outputBuffer, 1, 0,
+        sizeof(cl_int) * 16384, h_outputBuffer, 0, 0, &write_event[2]);
+
+#ifdef TIMING
+    h2d_time += probe_event_time(write_event[0], cl.q());
+    h2d_time += probe_event_time(write_event[1], cl.q());
+    h2d_time += probe_event_time(write_event[2], cl.q());
 #endif
 
 	int src = 1, final_ret = 0;
