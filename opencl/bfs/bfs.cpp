@@ -17,7 +17,7 @@
 #include "CLHelper.h"
 #include "util.h"
 
-#define MAX_THREADS_PER_BLOCK 256
+#define MAX_THREADS_PER_BLOCK 128
 
 //Structure to hold a node information
 struct Node {
@@ -271,8 +271,8 @@ int main(int argc, char * argv[])
         //Make execution Parameters according to the number of nodes
         //Distribute threads across multiple Blocks if necessary
         if(no_of_nodes>MAX_THREADS_PER_BLOCK) {
-            num_of_blocks = (int)ceil(no_of_nodes/(double)MAX_THREADS_PER_BLOCK) * 2;
-            num_of_threads_per_block = MAX_THREADS_PER_BLOCK / 2; // make it 128
+            num_of_blocks = (int)ceil(no_of_nodes/(double)MAX_THREADS_PER_BLOCK);
+            num_of_threads_per_block = MAX_THREADS_PER_BLOCK;
         }
         work_group_size = num_of_threads_per_block;
         // allocate host memory
