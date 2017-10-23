@@ -12,6 +12,7 @@ release:
 
 clang: $(SRC)
 	clang++ $(SRC) -o $(EXE) -I../util --cuda-gpu-arch=sm_20 \
+		-O3 -use_fast_math \
 		-L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread -DTIMING
 
 enum:

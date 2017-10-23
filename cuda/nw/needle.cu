@@ -184,6 +184,7 @@ void runTest( int argc, char** argv)
 	}
 
 #ifdef  TIMING
+    cudaDeviceSynchronize();
     gettimeofday(&tv_kernel_end, NULL);
     tvsub(&tv_kernel_end, &tv_kernel_start, &tv);
     kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;

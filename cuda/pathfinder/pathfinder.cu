@@ -227,7 +227,7 @@ void run(int argc, char** argv)
 #endif
 
     int final_ret = calc_path(gpuWall, gpuResult, rows, cols, \
-	 pyramid_height, blockCols, borderCols);
+	 pyramid_height, size/BLOCK_SIZE, borderCols);
 
 #ifdef  TIMING
     gettimeofday(&tv_kernel_end, NULL);

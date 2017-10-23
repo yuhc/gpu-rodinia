@@ -1,2 +1,2 @@
 # cuda/lud_cuda -i ../../data/lud/256.dat 
-cuda/lud_cuda -s 256 -v
+cuda/lud_cuda -s 2048

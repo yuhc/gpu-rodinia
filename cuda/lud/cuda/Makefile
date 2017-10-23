@@ -39,6 +39,7 @@ all : $(EXECUTABLE)
 clang: $(SRC)
 	clang++ lud.cu lud_kernel.cu ../common/common.c -o $(EXECUTABLE) \
 		-I../common -I../../util --cuda-gpu-arch=sm_20 \
+		-O3 -use_fast_math \
 		-L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread -DTIMING
 
 $(EXECUTABLE) : $(OBJS)

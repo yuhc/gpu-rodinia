@@ -201,7 +201,10 @@ void lud_cuda(float *m, int matrix_dim)
       lud_perimeter<<<(matrix_dim-i)/BLOCK_SIZE-1, BLOCK_SIZE*2>>>(m, matrix_dim, i);
       dim3 dimGrid((matrix_dim-i)/BLOCK_SIZE-1, (matrix_dim-i)/BLOCK_SIZE-1);
       lud_internal<<<dimGrid, dimBlock>>>(m, matrix_dim, i); 
+      // for measurement fairness
+      cudaDeviceSynchronize();
   }
   lud_diagonal<<<1,BLOCK_SIZE>>>(m, matrix_dim, i);
+  cudaDeviceSynchronize();
 }
 

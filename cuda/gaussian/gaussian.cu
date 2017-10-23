@@ -30,7 +30,7 @@
 #elif defined(RD_WG_SIZE)
         #define MAXBLOCKSIZE RD_WG_SIZE
 #else
-        #define MAXBLOCKSIZE 512
+        #define MAXBLOCKSIZE 4
 #endif
 
 //2D defines. Go from specific to general                                                

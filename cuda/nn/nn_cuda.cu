@@ -29,7 +29,7 @@ float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
 #define print( x )			printf( #x ": %lu\n", (unsigned long) x )
 #define DEBUG				false
 
-#define DEFAULT_THREADS_PER_BLOCK 256
+#define DEFAULT_THREADS_PER_BLOCK 16
 
 #define MAX_ARGS 10
 #define REC_LENGTH 53 // size of a record in db
@@ -164,10 +164,12 @@ int main(int argc, char* argv[])
   gettimeofday(&tv_kernel_start, NULL);
 #endif
 
+  for (int tc = 0; tc < 1000; tc++) {
     euclid<<< gridDim, threadsPerBlock >>>(d_locations,d_distances,numRecords,lat,lng);
-    cudaThreadSynchronize();
+  }
 
 #ifdef  TIMING
+    cudaDeviceSynchronize();
     gettimeofday(&tv_kernel_end, NULL);
     tvsub(&tv_kernel_end, &tv_kernel_start, &tv);
     kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
