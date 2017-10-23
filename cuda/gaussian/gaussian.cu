@@ -19,6 +19,10 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef TIMING
+#include "timing.h"
+#endif
+
 #ifdef RD_WG_SIZE_0_0
         #define MAXBLOCKSIZE RD_WG_SIZE_0_0
 #elif defined(RD_WG_SIZE_0)
@@ -38,6 +42,18 @@
         #define BLOCK_SIZE_XY RD_WG_SIZE
 #else
         #define BLOCK_SIZE_XY 4
+#endif
+
+#ifdef TIMING
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
 #endif
 
 int Size;
@@ -92,7 +108,7 @@ create_matrix(float *m, int size){
 int main(int argc, char *argv[])
 {
   printf("WG size of kernel 1 = %d, WG size of kernel 2= %d X %d\n", MAXBLOCKSIZE, BLOCK_SIZE_XY, BLOCK_SIZE_XY);
-    int verbose = 1;
+    int verbose = 0;
     int i, j;
     char flag;
     if (argc < 2) {
@@ -193,6 +209,10 @@ int main(int argc, char *argv[])
     free(m);
     free(a);
     free(b);
+
+#ifdef  TIMING
+	printf("Exec: %f\n", kernel_time);
+#endif
 }
 /*------------------------------------------------------
  ** PrintDeviceProperties
@@ -358,6 +378,10 @@ void ForwardSub()
 	dim3 dimBlockXY(blockSize2d,blockSize2d);
 	dim3 dimGridXY(gridSize2d,gridSize2d);
 
+#ifdef  TIMING
+	gettimeofday(&tv_kernel_start, NULL);
+#endif
+
     // begin timing kernels
     struct timeval time_start;
     gettimeofday(&time_start, NULL);
@@ -373,6 +397,11 @@ void ForwardSub()
     gettimeofday(&time_end, NULL);
     totalKernelTime = (time_end.tv_sec * 1000000 + time_end.tv_usec) - (time_start.tv_sec * 1000000 + time_start.tv_usec);
 	
+#ifdef  TIMING
+	tvsub(&time_end, &tv_kernel_start, &tv);
+	kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
+
 	// copy memory back to CPU
 	cudaMemcpy(m, m_cuda, Size * Size * sizeof(float),cudaMemcpyDeviceToHost );
 	cudaMemcpy(a, a_cuda, Size * Size * sizeof(float),cudaMemcpyDeviceToHost );

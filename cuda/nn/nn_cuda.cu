@@ -10,6 +10,20 @@
 #include <vector>
 #include "cuda.h"
 
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
 #define min( a, b )			a > b ? b : a
 #define ceilDiv( a, b )		( a + b - 1 ) / b
 #define print( x )			printf( #x ": %lu\n", (unsigned long) x )
@@ -145,8 +159,19 @@ int main(int argc, char* argv[])
     /**
     * Execute kernel
     */
+
+#ifdef  TIMING
+  gettimeofday(&tv_kernel_start, NULL);
+#endif
+
     euclid<<< gridDim, threadsPerBlock >>>(d_locations,d_distances,numRecords,lat,lng);
     cudaThreadSynchronize();
+
+#ifdef  TIMING
+    gettimeofday(&tv_kernel_end, NULL);
+    tvsub(&tv_kernel_end, &tv_kernel_start, &tv);
+    kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
     //Copy data from device memory to host memory
     cudaMemcpy( distances, d_distances, sizeof(float)*numRecords, cudaMemcpyDeviceToHost );
@@ -164,6 +189,9 @@ int main(int argc, char* argv[])
 	cudaFree(d_locations);
 	cudaFree(d_distances);
 
+#ifdef  TIMING
+    printf("Exec: %f\n", kernel_time);
+#endif
 }
 
 int loadData(char *filename,std::vector<Record> &records,std::vector<LatLong> &locations){

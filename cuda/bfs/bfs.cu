@@ -39,7 +39,7 @@ struct timeval tv_d2h_start, tv_d2h_end;
 struct timeval tv_kernel_start, tv_kernel_end;
 struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
 struct timeval tv_close_start, tv_close_end;
-float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time= 0,
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
       d2h_time = 0, close_time = 0, total_time = 0;
 #endif
 

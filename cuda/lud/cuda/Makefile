@@ -8,7 +8,7 @@ DEFS += \
 NVCCFLAGS += -I../common \
 			 -O3 \
 			 -use_fast_math \
-			 -arch=sm_13 \
+			 -arch=sm_20 \
 			 -lm \
 			 $(SPACE)
 
@@ -36,6 +36,10 @@ all : $(EXECUTABLE)
 %.o:	%.cu 
 	$(NVCC) $(KERNEL_DIM) $(NVCCFLAGS) $(DEFS) -o $@ -c $<
 
+clang: $(SRC)
+	clang++ lud.cu lud_kernel.cu ../common/common.c -o $(EXECUTABLE) \
+		-I../common -I../../util --cuda-gpu-arch=sm_20 \
+		-L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread -DTIMING
 
 $(EXECUTABLE) : $(OBJS)
 	$(NVCC) $(NVCCFLAGS) -o $@  $?
