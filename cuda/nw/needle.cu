@@ -10,6 +10,20 @@
 // includes, kernels
 #include "needle_kernel.cu"
 
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // declaration, forward
 void runTest( int argc, char** argv);
@@ -148,6 +162,10 @@ void runTest( int argc, char** argv)
 	dim3 dimBlock(BLOCK_SIZE, 1);
 	int block_width = ( max_cols - 1 )/BLOCK_SIZE;
 
+#ifdef  TIMING
+  gettimeofday(&tv_kernel_start, NULL);
+#endif
+
 	printf("Processing top-left matrix\n");
 	//process top-left matrix
 	for( int i = 1 ; i <= block_width ; i++){
@@ -165,6 +183,11 @@ void runTest( int argc, char** argv)
 		                                      ,max_cols, penalty, i, block_width); 
 	}
 
+#ifdef  TIMING
+    gettimeofday(&tv_kernel_end, NULL);
+    tvsub(&tv_kernel_end, &tv_kernel_start, &tv);
+    kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
     cudaMemcpy(output_itemsets, matrix_cuda, sizeof(int) * size, cudaMemcpyDeviceToHost);
 	
@@ -235,6 +258,9 @@ void runTest( int argc, char** argv)
 	free(referrence);
 	free(input_itemsets);
 	free(output_itemsets);
-	
+
+#ifdef  TIMING
+    printf("Exec: %f\n", kernel_time);
+#endif
 }
 

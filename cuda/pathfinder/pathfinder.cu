@@ -3,12 +3,26 @@
 #include <time.h>
 #include <assert.h>
 
+#ifdef TIMING
+#include "timing.h"
+
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
+
 #define BLOCK_SIZE 256
 #define STR_SIZE 256
 #define DEVICE 0
 #define HALO 1 // halo width along one direction when advancing to the next iteration
 
-#define BENCH_PRINT
+//#define BENCH_PRINT
 
 void run(int argc, char** argv);
 
@@ -19,44 +33,42 @@ int* result;
 #define M_SEED 9
 int pyramid_height;
 
-//#define BENCH_PRINT
-
 void
 init(int argc, char** argv)
 {
-	if(argc==4){
-		cols = atoi(argv[1]);
-		rows = atoi(argv[2]);
+	if(argc==4){
+		cols = atoi(argv[1]);
+		rows = atoi(argv[2]);
                 pyramid_height=atoi(argv[3]);
 	}else{
                 printf("Usage: dynproc row_len col_len pyramid_height\n");
                 exit(0);
         }
-	data = new int[rows*cols];
-	wall = new int*[rows];
-	for(int n=0; n<rows; n++)
-		wall[n]=data+cols*n;
-	result = new int[cols];
-	
-	int seed = M_SEED;
-	srand(seed);
-
-	for (int i = 0; i < rows; i++)
-    {
-        for (int j = 0; j < cols; j++)
-        {
-            wall[i][j] = rand() % 10;
-        }
-    }
-#ifdef BENCH_PRINT
-    for (int i = 0; i < rows; i++)
-    {
-        for (int j = 0; j < cols; j++)
-        {
-            printf("%d ",wall[i][j]) ;
-        }
-        printf("\n") ;
-    }
+	data = new int[rows*cols];
+	wall = new int*[rows];
+	for(int n=0; n<rows; n++)
+		wall[n]=data+cols*n;
+	result = new int[cols];
+	
+	int seed = M_SEED;
+	srand(seed);
+
+	for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
+            wall[i][j] = rand() % 10;
+        }
+    }
+#ifdef BENCH_PRINT
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
+            printf("%d ",wall[i][j]) ;
+        }
+        printf("\n") ;
+    }
 #endif
 }
 
@@ -171,6 +183,9 @@ int calc_path(int *gpuWall, int *gpuResult[2], int rows, int cols, \
                 MIN(pyramid_height, rows-t-1), 
                 gpuWall, gpuResult[src], gpuResult[dst],
                 cols,rows, t, borderCols);
+
+            // for the measurement fairness
+            cudaDeviceSynchronize();
 	}
         return dst;
 }
@@ -207,22 +222,29 @@ void run(int argc, char** argv)
     cudaMalloc((void**)&gpuWall, sizeof(int)*(size-cols));
     cudaMemcpy(gpuWall, data+cols, sizeof(int)*(size-cols), cudaMemcpyHostToDevice);
 
+#ifdef  TIMING
+    gettimeofday(&tv_kernel_start, NULL);
+#endif
 
     int final_ret = calc_path(gpuWall, gpuResult, rows, cols, \
 	 pyramid_height, blockCols, borderCols);
 
-    cudaMemcpy(result, gpuResult[final_ret], sizeof(int)*cols, cudaMemcpyDeviceToHost);
-
-
-#ifdef BENCH_PRINT
-    for (int i = 0; i < cols; i++)
-            printf("%d ",data[i]) ;
-    printf("\n") ;
-    for (int i = 0; i < cols; i++)
-            printf("%d ",result[i]) ;
-    printf("\n") ;
+#ifdef  TIMING
+    gettimeofday(&tv_kernel_end, NULL);
+    tvsub(&tv_kernel_end, &tv_kernel_start, &tv);
+    kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
 #endif
 
+    cudaMemcpy(result, gpuResult[final_ret], sizeof(int)*cols, cudaMemcpyDeviceToHost);
+
+#ifdef BENCH_PRINT
+    for (int i = 0; i < cols; i++)
+            printf("%d ",data[i]) ;
+    printf("\n") ;
+    for (int i = 0; i < cols; i++)
+            printf("%d ",result[i]) ;
+    printf("\n") ;
+#endif
 
     cudaFree(gpuWall);
     cudaFree(gpuResult[0]);
@@ -232,5 +254,8 @@ void run(int argc, char** argv)
     delete [] wall;
     delete [] result;
 
+#ifdef  TIMING
+    printf("Exec: %f\n", kernel_time);
+#endif
 }
 

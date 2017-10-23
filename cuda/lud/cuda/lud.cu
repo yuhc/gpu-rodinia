@@ -25,6 +25,10 @@
 
 #include "common.h"
 
+#ifdef TIMING
+#include "timing.h"
+#endif
+
 #ifdef RD_WG_SIZE_0_0
         #define BLOCK_SIZE RD_WG_SIZE_0_0
 #elif defined(RD_WG_SIZE_0)
@@ -48,6 +52,17 @@ static struct option long_options[] = {
 extern void
 lud_cuda(float *d_m, int matrix_dim);
 
+#ifdef TIMING
+struct timeval tv;
+struct timeval tv_total_start, tv_total_end;
+struct timeval tv_h2d_start, tv_h2d_end;
+struct timeval tv_d2h_start, tv_d2h_end;
+struct timeval tv_kernel_start, tv_kernel_end;
+struct timeval tv_mem_alloc_start, tv_mem_alloc_end;
+struct timeval tv_close_start, tv_close_end;
+float init_time = 0, mem_alloc_time = 0, h2d_time = 0, kernel_time = 0,
+      d2h_time = 0, close_time = 0, total_time = 0;
+#endif
 
 int
 main ( int argc, char *argv[] )
@@ -134,7 +149,17 @@ main ( int argc, char *argv[] )
   cudaMemcpy(d_m, m, matrix_dim*matrix_dim*sizeof(float), 
 	     cudaMemcpyHostToDevice);
 
+#ifdef  TIMING
+  gettimeofday(&tv_kernel_start, NULL);
+#endif
+
   lud_cuda(d_m, matrix_dim);
+
+#ifdef  TIMING
+  gettimeofday(&tv_kernel_end, NULL);
+  tvsub(&tv_kernel_end, &tv_kernel_start, &tv);
+  kernel_time += tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
+#endif
 
   cudaMemcpy(m, d_m, matrix_dim*matrix_dim*sizeof(float), 
 	     cudaMemcpyDeviceToHost);
@@ -155,6 +180,10 @@ main ( int argc, char *argv[] )
   }
 
   free(m);
+
+#ifdef  TIMING
+  printf("Exec: %f\n", kernel_time);
+#endif
 
   return EXIT_SUCCESS;
 }				/* ----------  end of function main  ---------- */
