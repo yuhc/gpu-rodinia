@@ -2,8 +2,9 @@ Rodinia Benchmark Suite 3.1
 ===========================
 
 0. Modifications
-Please download the dataset from the [original package][data].
+Please download the dataset from the [original package][data], or my personal [Dropbox][dropbox] if the Virginia's link is down.
 [data]: http://lava.cs.virginia.edu/Rodinia/download_links.htm
+[dropbox]: https://www.dropbox.com/s/cc6cozpboht3mtu/rodinia-3.1-data.tar.gz
 
 Make sure the Platform 0 is the one needed to be tested, and GPU is the
 device 0 on this platform.
