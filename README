@@ -6,6 +6,11 @@ Please download the dataset from the [original package][data], or my personal [D
 [data]: http://lava.cs.virginia.edu/Rodinia/download_links.htm
 [dropbox]: https://www.dropbox.com/s/cc6cozpboht3mtu/rodinia-3.1-data.tar.gz
 
+The Dropbox version has
+MD5: 0CF70BC7BD538794F626C0E04A6447AE
+SHA-256: B90994D5208EC5A0A133DFB9AB7928A1E8A16741503A91D212884B9E4FCE8CD8
+CRC32: 303E69CE
+
 Make sure the Platform 0 is the one needed to be tested, and GPU is the
 device 0 on this platform.
 
